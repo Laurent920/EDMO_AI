@@ -2,10 +2,12 @@ import os
 from datetime import datetime
 import re
 
-
+printInfo = False
+printDebugInfo = False
 # Clean the data by removing the packets that were lost in at least one of the data logs
 # and remove the possible duplicates
 
+precision = 0.05 # The margin in seconds from which we consider a packet to be out of sync
 def readLog(location):
     # Regex = r'(?P<hours>\d*):(?P<minutes>\d*):(?P<seconds>\d*)(\.(?P<decimals>\d*))*'
     Regex = r"(\d+:\d{2}:\d{2})(?!\.\d{6})"
@@ -34,17 +36,31 @@ def readLog(location):
                 cleanedLogs.append(l.split(' '))
                 cleanedLogs[j][0] = cleanedLogs[j][0][:-1]
             motorData.append(cleanedLogs)
-            print(len(cleanedLogs))
+            if printInfo: print(f'Original size: {len(cleanedLogs)}')
     return motorData
 
 
-def getLogDuplicates(motorData):
+def removeLogDuplicates(motorData):
     for j, log in enumerate(motorData):  # Search for duplicates
-        for i in range(len(log) - 1):
+        i = 0
+        length = len(log)
+        while i < length - 1:
             if log[i][0] == log[i + 1][0]:
-                print(f'log number :{j}')
-                print(i)
+                print(f'log number :{j} has duplicates:')
+                print(f'{log[i][0]}{log[i + 1][0]}')
+                del motorData[j][i+1]
+                length -= 1
+                continue
+            i += 1
 
+
+def toTime(t):
+    today = datetime.today()
+    try:
+        return datetime.combine(today, datetime.strptime(t, "%H:%M:%S.%f").time())
+    except ValueError as e: 
+        print(f'error: {e}')
+        print(t)
 
 def cleanLog(motorData):
     shortestLog = min(len(log) for log in motorData)
@@ -63,17 +79,14 @@ def cleanLog(motorData):
             if i != j:
                 d = tLog ^ log
                 diff.append(d)
-                # print(f'{i}: {j}: {len(d)}')
-                # print(sorted(d))
-    print(f'Number of packets not well synced :{sum(len(nb) for nb in diff)}')
+                if printDebugInfo: print(f'{i}: {j}: {len(d)}')
+                if printDebugInfo: print(sorted(d))
+    if printInfo: print(f'Number of packets not well synced :{sum(len(nb) for nb in diff)}')
 
     timesToRemove = set()
-    precision = 0.1
-    count = 0
     for sets in diff:  # Record timestamps that have a bigger difference than the precision
         sets = sorted(sets)
-        today = datetime.today()
-        times = [datetime.combine(today, datetime.strptime(t, "%H:%M:%S.%f").time()) for t in sets]
+        times = [toTime(t) for t in sets]
         i = 0
         while i < len(sets):
             curT = times[i]
@@ -82,15 +95,35 @@ def cleanLog(motorData):
                 break
             nextT = times[i + 1]
 
-            a = (nextT - curT).total_seconds() 
             if (nextT - curT).total_seconds() < precision:
                 i += 2
             else:
                 timesToRemove.add(sets[i])
                 i += 1
-    # print(f'Packets time to drop: {sorted(timesToRemove)}')
-    print(f'Number of packets to remove = {len(timesToRemove)}')
+            
+    if printInfo: print(f'Packets time to drop: {sorted(timesToRemove)}') 
+    if printInfo: print(f'Number of packets to remove = {len(timesToRemove)}')
     return timesToRemove
+
+
+def nearTimeToRemove(t, timesToRemove):
+    times = sorted([toTime(time) for time in timesToRemove]) 
+    curT = toTime(t)
+    
+    low, high = 0, len(times) - 1
+    
+    while low <= high:
+        mid = (low + high) // 2
+        diff = (curT - times[mid]).total_seconds()
+
+        if abs(diff) < precision: 
+            return True
+
+        if diff > 0:  
+            low = mid + 1
+        else:
+            high = mid - 1
+    return False
 
 
 def writeToLog(motorData, timesToRemove, path):
@@ -106,7 +139,6 @@ def writeToLog(motorData, timesToRemove, path):
     if not os.path.exists(cleanPath):
         os.makedirs(cleanPath)
         print(f'Creating new folder {cleanPath}')
-    # print(cleanPath)
 
     pattern = r"^(IMU|Motor[0-9]*).log$"
     index = 1
@@ -121,7 +153,7 @@ def writeToLog(motorData, timesToRemove, path):
                 f = open(os.path.join(location, filename), "r").read()
                 logs = f.split('\n')[:-1]
                 for i, row in enumerate(motorData[0]):
-                    if row[0] not in timesToRemove:
+                    if row[0] not in timesToRemove and not nearTimeToRemove(row[0], timesToRemove):
                         size = len(logs[i].split(' ')[0])
                         log = f'{row[0]}{logs[i][size:]}\n'
                         newFile.write(log)
@@ -131,7 +163,7 @@ def writeToLog(motorData, timesToRemove, path):
             else:
                 newFile.write('Time, Frequency, Amplitude, Offset, PhaseShift, Phase\n')
                 for row in motorData[index]:
-                    if row[0] not in timesToRemove:
+                    if row[0] not in timesToRemove and not nearTimeToRemove(row[0], timesToRemove):
                         newFile.write(f'{row[0]}, {row[2][:-1]}, {row[4][:-1]}, {row[6][:-1]}, {row[9][:-1]}, {row[11]}\n')
                     else:
                         count += 1
@@ -140,12 +172,12 @@ def writeToLog(motorData, timesToRemove, path):
 
 
 if __name__ == "__main__":
-    readMulti = False
+    readMulti = True
     readOneFile = not readMulti
 
     if readMulti:
-        # path = './DataBloom/2024.09.13/'
-        path = './SessionLogsHuge/2024.08.28/'
+        path = './DataBloom/2024.09.10/'
+        # path = './SessionLogsHuge/2024.08.28/'
         # path = './SessionLogs/2024.09.13/'
         # path = './DataSmallEDMO/2024.09.07/'
 
@@ -162,16 +194,16 @@ if __name__ == "__main__":
                     location = newPath + filename
                     motorData = readLog(location)
                     timesToRemove = cleanLog(motorData)
-                    # getLogDuplicates(motorData)
+                    removeLogDuplicates(motorData)
                     writeToLog(motorData, timesToRemove, location)
                     print('__________________')
 
     if readOneFile:
-        path = './DataBloom/2024.09.13/Bloom/14.45.53'
-        path = './SessionLogsHuge/2024.08.28/Bloom/15.17.50'
+        path = './DataBloom/2024.09.14/Bloom/14.40.40'
+        # path = './SessionLogsHuge/2024.08.28/Bloom/15.20.16'
         location = path
         motorData = readLog(location)
-        getLogDuplicates(motorData)
+        removeLogDuplicates(motorData)
         timesToRemove = cleanLog(motorData)
         writeToLog(motorData, timesToRemove, path)
 
