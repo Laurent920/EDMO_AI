@@ -59,7 +59,7 @@ class SerialProtocol(asyncio.Protocol):
             if not self.receiveBuffer.endswith(EDMOPacket.FOOTER):
                 continue
 
-            # Data transmission successful at this point
+            # DataBloom transmission successful at this point
             # Relinquish control to packet handler
             self.receivingData = False
 

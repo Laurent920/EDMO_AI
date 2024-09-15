@@ -32,14 +32,14 @@ class SessionLogger:
                 continue
 
             async with aiofiles.open(
-                f"{self.directoryName}/{channel}.log", "a+"
+                    f"{self.directoryName}/{channel}.log", "a+"
             ) as log:
                 await log.writelines(channelContent)
 
             channelContent.clear()
 
     async def update(self):
-        currTime  = datetime.now()
+        currTime = datetime.now()
         deltaTime = (currTime - self.lastFlushTime).total_seconds()
 
         # Let's not constantly write to file
