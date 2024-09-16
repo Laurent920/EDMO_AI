@@ -29,9 +29,9 @@ def readLog(location):
             for j in range(len(logs)):
                 l = logs[j]
                 if re.match(Regex, l):
-                    print(f"Log file format wrong: {l}")
+                    if printInfo: print(f"Log file format wrong: {l}")
                     l = re.sub(Regex, r"\1.000000", l)
-                    print(l)
+                    if printInfo: print(l)
 
                 cleanedLogs.append(l.split(' '))
                 cleanedLogs[j][0] = cleanedLogs[j][0][:-1]
@@ -176,7 +176,7 @@ if __name__ == "__main__":
     readOneFile = not readMulti
 
     if readMulti:
-        path = './DataBloom/2024.09.10/'
+        path = './DataBloom/2024.09.16/'
         # path = './SessionLogsHuge/2024.08.28/'
         # path = './SessionLogs/2024.09.13/'
         # path = './DataSmallEDMO/2024.09.07/'
