@@ -177,7 +177,6 @@ if __name__ == "__main__":
 
     if readMulti:
         path = './DataBloom/2024.09.16/'
-        # path = './SessionLogsHuge/2024.08.28/'
         # path = './SessionLogs/2024.09.13/'
         # path = './DataSmallEDMO/2024.09.07/'
 
@@ -200,7 +199,6 @@ if __name__ == "__main__":
 
     if readOneFile:
         path = './DataBloom/2024.09.14/Bloom/14.40.40'
-        # path = './SessionLogsHuge/2024.08.28/Bloom/15.20.16'
         location = path
         motorData = readLog(location)
         removeLogDuplicates(motorData)
