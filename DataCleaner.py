@@ -2,14 +2,16 @@ import os
 from datetime import datetime
 import re
 
+import numpy as np
+import matplotlib.pyplot as plt
+
 printInfo = False
 printDebugInfo = False
 # Clean the data by removing the packets that were lost in at least one of the data logs
 # and remove the possible duplicates
 
-precision = 0.05 # The margin in seconds from which we consider a packet to be out of sync
+precision = 0.04 # The margin in seconds from which we consider a packet to be out of sync
 def readLog(location):
-    # Regex = r'(?P<hours>\d*):(?P<minutes>\d*):(?P<seconds>\d*)(\.(?P<decimals>\d*))*'
     Regex = r"(\d+:\d{2}:\d{2})(?!\.\d{6})"
 
     motorData = []
@@ -116,7 +118,8 @@ def nearTimeToRemove(t, timesToRemove):
         mid = (low + high) // 2
         diff = (curT - times[mid]).total_seconds()
 
-        if abs(diff) < precision: 
+        if abs(diff) < precision:
+            print(f'time we check for:{curT}, time to close in times to remove: {times[mid]}')
             return True
 
         if diff > 0:  
@@ -142,6 +145,9 @@ def writeToLog(motorData, timesToRemove, path):
 
     pattern = r"^(IMU|Motor[0-9]*).log$"
     index = 1
+    deletedRows = np.empty(5, dtype=object)
+    for i in range(5):
+        deletedRows[i] = []
     for filename in os.listdir(location):
         with open(f"{cleanPath}/{filename}", "w") as newFile:
             count = 0
@@ -158,6 +164,7 @@ def writeToLog(motorData, timesToRemove, path):
                         log = f'{row[0]}{logs[i][size:]}\n'
                         newFile.write(log)
                     else:
+                        deletedRows[0].append(row[0])
                         count += 1
                 print(f'Row deleted for IMU log: {count}, final size: {len(motorData[0])-count}')
             else:
@@ -166,20 +173,31 @@ def writeToLog(motorData, timesToRemove, path):
                     if row[0] not in timesToRemove and not nearTimeToRemove(row[0], timesToRemove):
                         newFile.write(f'{row[0]}, {row[2][:-1]}, {row[4][:-1]}, {row[6][:-1]}, {row[9][:-1]}, {row[11]}\n')
                     else:
+                        deletedRows[index].append(row[0])
                         count += 1
                 print(f'Row deleted for index {index-1}: {count}, final size: {len(motorData[index])-count}')
                 index += 1
-
+    # Plot removed timestamps
+    timesToRemove = (list(sorted(timesToRemove)))
+    for i, r in enumerate(deletedRows):
+        deleted_indices = [timesToRemove.index(time) for time in r]
+        plt.eventplot(np.array(deleted_indices)[:,np.newaxis], lineoffsets=[i+1] * len(deleted_indices), orientation="vertical", colors='r', linelengths=0.1)
+    plt.xticks([1,2,3,4,5], ['IMU', 'Motor0', 'Motor1', 'Motor2', 'Motor3'])
+    plt.yticks(np.arange(0, len(timesToRemove), 1), np.array(timesToRemove))
+    plt.title(path)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     readMulti = True
     readOneFile = not readMulti
 
     if readMulti:
-        path = './DataBloom/2024.09.16/'
+        # path = './DataBloom/2024.09.16/'
         # path = './SessionLogs/2024.09.13/'
         # path = './DataSmallEDMO/2024.09.07/'
-
+        path = './DataCorosectPC/2024.09.24/'
         for folder in os.listdir(path):  # Read folders of folders
             print(folder)
             newPath = path + folder + '/'
@@ -198,7 +216,7 @@ if __name__ == "__main__":
                     print('__________________')
 
     if readOneFile:
-        path = './DataBloom/2024.09.14/Bloom/14.40.40'
+        path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'
         location = path
         motorData = readLog(location)
         removeLogDuplicates(motorData)
