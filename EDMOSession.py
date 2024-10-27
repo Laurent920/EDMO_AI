@@ -116,8 +116,23 @@ class EDMOOveridePlayer(EDMOPlayer):
 
     def onDisconnect(self):
         self.session.playerDisconnected(self)
+        
+        
+# region Laurent 
+class EDMOManualPlayer(EDMOPlayer):
+    def __init__(self, rtcPeer: None, name: str,  edmoSession: "EDMOSession"):
+        self.rtc = rtcPeer
+        self.session = edmoSession
 
+        self.number = -1
 
+        self.voted =  False
+
+        self.name = name
+
+# endregion
+
+# region EDMO Session
 class TaskEntry:
     def __init__(self, strings: dict[str, str], completed: bool = False):
         self.strings = strings
@@ -323,15 +338,25 @@ class EDMOSession:
 
     # Update the state of the actual edmo robot
     # All motors are sent through the serial protocol
-    async def update(self):
+    async def update(self, instruction=None):
         if not self.protocol.hasConnection():
             return
-
-        motor = self.motors[0]
-
+    
+        print(self.motors)
+        
+        try:
+            if instruction:
+                motorNumber, command = instruction.split(" ", 1)
+                self.updateMotor(int(motorNumber), command)
+        except ValueError:
+            print("Motor id number should be an integer")
+            return 
+        except IndexError:
+            print("Motor id number must be in [0,4]")
+            return 
+            
         for motor in self.motors:
             command = motor.asCommand()
-            # print(command)
             self.protocol.write(command)
 
         self.protocol.write(EDMOPacket.create(EDMOCommands.SEND_MOTOR_DATA))
@@ -347,6 +372,7 @@ class EDMOSession:
 
         for p in self.waitingPlayers:
             await p.rtc.close()
+#endregion
 
 #region EDMO COMMUNICATION 
 # Functions to handle packets delivered by the EDMO itself

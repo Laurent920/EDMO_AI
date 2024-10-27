@@ -61,8 +61,8 @@ def toTime(t):
     try:
         return datetime.combine(today, datetime.strptime(t, "%H:%M:%S.%f").time())
     except ValueError as e: 
-        print(f'error: {e}')
-        print(t)
+        print(f'error: {e} for time {t}')
+
 
 def cleanLog(motorData):
     shortestLog = min(len(log) for log in motorData)
