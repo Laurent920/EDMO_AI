@@ -10,6 +10,8 @@ from FusedCommunication import FusedCommunication, FusedCommunicationProtocol
 from aiortc.contrib.signaling import object_from_string, object_to_string
 import os
 import re
+import aioconsole
+
 
 
 class EDMOManual:
@@ -68,45 +70,76 @@ class EDMOManual:
         if len(sessionUpdates) > 0:
             await asyncio.wait(sessionUpdates)
         await minUpdateDuration
-        
     
-    def manualInput(self):
+    
+    def reset(self):
+        for sessionID in self.activeSessions:
+            session = self.activeSessions[sessionID] 
+            for motor in session.motors:
+                motor._amp = 0.0
+                motor._freq = 0.0
+                motor._offset = 90
+                motor._phaseShift = 0
+    
+    
+    async def manualInput(self):
         # instructions to use: 
         # c motor_id 'amp'/'off'/'freq'/'phb' float (ex: c 3 amp 13.5)
         # f path (ex: cleanData/2024.09.24/Kumoko/12.02.51)
-        
-        instructions = input("Enter instructions:")
-        command, detail = instructions.split(" ", 1)
-        
-        match (command):
-            case "c":
-                return "message", detail
-            case "f":
-                data = []
-                for filename in os.listdir(detail):
-                    pattern = r"^Motor[0-9]*\.log$"
-                    if re.match(pattern, filename):
-                        data.append(open(os.path.join(detail, filename), "r").read())
-
-                return "path", data
-            case _:
-                print("wrong instruction flag")
-                pass        
-                
-        return None, None
-        
+        while(True):
+            instructions = await asyncio.gather(
+                            aioconsole.ainput(),
+                        )
+            instruction = instructions[0].split(" ", 1)
+            
+            data = None
+            match (instruction[0]):
+                case "c":
+                    print(f'Sending instruction: {instruction[1]}')
+                    motorNumber, command = instruction[1].split(" ", 1)
+                    for sessionID in self.activeSessions:
+                        session = self.activeSessions[sessionID] 
+                        session.updateMotor(int(motorNumber), command)
+                case "f":
+                    data = {}
+                    nbInstructions = 0
+                    for filename in os.listdir(instruction[1]):
+                        pattern = r"^Motor[0-9]*\.log$"
+                        if re.match(pattern, filename):
+                            data[filename[5]] = (open(os.path.join(instruction[1], filename), "r").read()).splitlines()
+                            nbInstructions = len(data[filename[5]])
+                            
+                    print("reading file...")    
+                    print(nbInstructions)
+                    for i in range(1, nbInstructions):
+                        for id, values in data.items():
+                            await self.update(self.dataToInstructions(id, values[i]))
+                    print("finished reading file")
+                case "reset":
+                    print("Resetting")
+                    self.reset()
+                case _:
+                    print("wrong instruction flag")
+                    pass        
+            
+    
+    def dataToInstructions(self, id, data):
+        splits = data.split(',')
+        instruction = [f'{id} freq{splits[1]}']
+        instruction.append(f'{id} amp{splits[2]}')
+        instruction.append(f'{id} off{splits[3]}')
+        instruction.append(f'{id} phb{splits[4]}')
+        return instruction
         
     async def run(self) -> None:
         await self.fusedCommunication.initialize()
 
         closed = False
-        instruction = None
-        
+        asyncio.get_event_loop().create_task(self.manualInput())
+
         try:
-            while not closed:
-                if self.activeSessions:
-                    flag, instruction = self.manualInput()
-                await self.update(instruction)
+            while not closed:   
+                await self.update()
         except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
             pass
 

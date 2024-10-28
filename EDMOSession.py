@@ -338,16 +338,24 @@ class EDMOSession:
 
     # Update the state of the actual edmo robot
     # All motors are sent through the serial protocol
-    async def update(self, instruction=None):
+    async def update(self, instructions=None):
         if not self.protocol.hasConnection():
             return
-    
-        print(self.motors)
-        
+            
         try:
-            if instruction:
-                motorNumber, command = instruction.split(" ", 1)
-                self.updateMotor(int(motorNumber), command)
+            if instructions:
+                for instruction in instructions:
+                    if instruction == 'reset':
+                        # TODO Reset all values to default
+                        pass
+                    
+                    motorNumber, order = instruction.split(" ", 1)
+                    
+                    command, value = order.split(' ')
+                    if(command == "freq"):
+                        self.setFreq(float(value))
+                        
+                    self.updateMotor(int(motorNumber), order)
         except ValueError:
             print("Motor id number should be an integer")
             return 
