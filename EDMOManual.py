@@ -1,17 +1,11 @@
 import asyncio
-from asyncio import tasks
-from typing import AsyncIterator
-from aiohttp import web
-from aiohttp.web_middlewares import normalize_path_middleware
-from aiohttp_middlewares import cors_middleware
-from prompt_toolkit import Application  # type: ignore
 from EDMOSession import EDMOSession
 from FusedCommunication import FusedCommunication, FusedCommunicationProtocol
-from aiortc.contrib.signaling import object_from_string, object_to_string
 import os
 import re
 import aioconsole
-
+from Utilities.Helpers import toTime
+from datetime import datetime, timedelta
 
 
 class EDMOManual:
@@ -36,6 +30,9 @@ class EDMOManual:
         self.activeSessions[identifier] = EDMOSession(
             protocol, 4, self.removeSession
         )
+        
+        for i in range(4):
+            self.activeSessions[identifier].registerManualPlayer()
 
     def onEDMODisconnect(self, protocol: FusedCommunicationProtocol):
         # Assumption: protocol is non null
@@ -61,7 +58,7 @@ class EDMOManual:
 
         for sessionID in self.activeSessions:
             session = self.activeSessions[sessionID]
-            sessionUpdates.append(asyncio.create_task(session.update(instruction)))
+            sessionUpdates.append(asyncio.create_task(session.update()))
 
         # Ensure that the update cycle runs at most 10 times a second
         minUpdateDuration = asyncio.create_task(asyncio.sleep(0.1))
@@ -75,12 +72,34 @@ class EDMOManual:
     def reset(self):
         for sessionID in self.activeSessions:
             session = self.activeSessions[sessionID] 
-            for motor in session.motors:
-                motor._amp = 0.0
-                motor._freq = 0.0
-                motor._offset = 90
-                motor._phaseShift = 0
-    
+            for player in session.activePlayers:
+                player.reset()
+                
+    async def fileInput(self, id, data:list[str], nbInstructions):
+        print("reading file...")    
+        # print(data)
+        # print(nbInstructions)
+        for i in range(nbInstructions - 1):
+            cur_split = data[i].split(': ')
+            next_split = data[i+1].split(': ')
+            
+            c = datetime.strptime(cur_split[0],"%H:%M:%S.%f")
+            n = datetime.strptime(next_split[0],"%H:%M:%S.%f")
+            cur_timedelta = timedelta(hours=c.hour, minutes=c.minute, seconds=c.second)
+            # print(cur_split)
+            if i == 0:
+                delay = cur_timedelta.total_seconds()
+                print(delay)
+                await asyncio.sleep(delay)
+            else:
+                delay = (n-c).total_seconds()
+                print(delay)
+                await asyncio.sleep(delay)
+            
+            for sessionID in self.activeSessions:
+                session = self.activeSessions[sessionID]
+                await session.activePlayers[int(id)].onMessage(cur_split[1])
+        print("finished reading file")
     
     async def manualInput(self):
         # instructions to use: 
@@ -99,37 +118,30 @@ class EDMOManual:
                     motorNumber, command = instruction[1].split(" ", 1)
                     for sessionID in self.activeSessions:
                         session = self.activeSessions[sessionID] 
-                        session.updateMotor(int(motorNumber), command)
+                        await session.activePlayers[int(motorNumber)].onMessage(command)
                 case "f":
+                    filepath = instruction[1]
                     data = {}
-                    nbInstructions = 0
-                    for filename in os.listdir(instruction[1]):
-                        pattern = r"^Motor[0-9]*\.log$"
+                    nbInstructions = {}
+                    for filename in os.listdir(filepath):
+                        pattern = r"^Input_Player[0-9]*\.log$"
                         if re.match(pattern, filename):
-                            data[filename[5]] = (open(os.path.join(instruction[1], filename), "r").read()).splitlines()
-                            nbInstructions = len(data[filename[5]])
+                            data[filename[12]] = (open(os.path.join(filepath, filename), "r").read()).splitlines()
+                            nbInstructions[filename[12]] = (len(data[filename[12]]) - 1)
                             
-                    print("reading file...")    
-                    print(nbInstructions)
-                    for i in range(1, nbInstructions):
-                        for id, values in data.items():
-                            await self.update(self.dataToInstructions(id, values[i]))
-                    print("finished reading file")
+                    loop = asyncio.get_event_loop()
+                    tasks = []
+                    for key in data.keys():
+                        task = loop.create_task(self.fileInput(key, data[key], nbInstructions[key]))
+                        tasks.append(task)
+                    await asyncio.gather(*tasks)
+                        
                 case "reset":
                     print("Resetting")
                     self.reset()
                 case _:
                     print("wrong instruction flag")
                     pass        
-            
-    
-    def dataToInstructions(self, id, data):
-        splits = data.split(',')
-        instruction = [f'{id} freq{splits[1]}']
-        instruction.append(f'{id} amp{splits[2]}')
-        instruction.append(f'{id} off{splits[3]}')
-        instruction.append(f'{id} phb{splits[4]}')
-        return instruction
         
     async def run(self) -> None:
         await self.fusedCommunication.initialize()
@@ -143,9 +155,7 @@ class EDMOManual:
         except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
             pass
 
-    async def onShutdown(self, app: web.Application | None = None):
-        yield
-
+    async def onShutdown(self, app: None = None):
         print("Cleaning up")
         """Shuts down existing connections gracefully to prevent a minor deadlock when shutting down the server"""
         self.fusedCommunication.close()

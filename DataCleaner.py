@@ -1,9 +1,9 @@
 import os
-from datetime import datetime
 import re
 
 import numpy as np
 import matplotlib.pyplot as plt
+from Utilities.Helpers import toTime
 
 printInfo = False
 printDebugInfo = False
@@ -54,14 +54,6 @@ def removeLogDuplicates(motorData):
                 length -= 1
                 continue
             i += 1
-
-
-def toTime(t):
-    today = datetime.today()
-    try:
-        return datetime.combine(today, datetime.strptime(t, "%H:%M:%S.%f").time())
-    except ValueError as e: 
-        print(f'error: {e} for time {t}')
 
 
 def cleanLog(motorData):

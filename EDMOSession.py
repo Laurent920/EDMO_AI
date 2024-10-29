@@ -120,16 +120,39 @@ class EDMOOveridePlayer(EDMOPlayer):
         
 # region Laurent 
 class EDMOManualPlayer(EDMOPlayer):
-    def __init__(self, rtcPeer: None, name: str,  edmoSession: "EDMOSession"):
-        self.rtc = rtcPeer
+    def __init__(self, edmoSession: "EDMOSession"):
+        self.rtc = None
         self.session = edmoSession
 
         self.number = -1
-
+        
+        self.name = None
+        
         self.voted =  False
 
-        self.name = name
+        
+    async def onMessage(self, message: str):
+        self.session.sessionLog.write(f"Input_Manual{self.number}", message=message)
+        
+        parts = message.split(' ')
+        if(parts[0] == "freq"):
+            self.session.setFreq(float(parts[1]))
+            return
+        
+        self.session.updateMotor(self.number, message)
+    
+    def reset(self):
+        self.onMessage("amp 0")
+        self.onMessage("freq 0")
+        self.onMessage("off 90")
+        self.onMessage("phb 0")
+        
+    def assignNumber(self, number: int):
+        self.number = number        
+        self.name = number
 
+    def sendMessage(self, message: str):
+        pass
 # endregion
 
 # region EDMO Session
@@ -218,6 +241,12 @@ class EDMOSession:
 
         return True
 
+    def registerManualPlayer(self):
+        manualPlayer = EDMOManualPlayer(self)
+        self.waitingPlayers.append(manualPlayer)
+        manualPlayer.onConnect()
+        
+        return True
 
     # The player finally connected
     # A motor is assigned to the player
@@ -338,30 +367,9 @@ class EDMOSession:
 
     # Update the state of the actual edmo robot
     # All motors are sent through the serial protocol
-    async def update(self, instructions=None):
+    async def update(self):
         if not self.protocol.hasConnection():
             return
-            
-        try:
-            if instructions:
-                for instruction in instructions:
-                    if instruction == 'reset':
-                        # TODO Reset all values to default
-                        pass
-                    
-                    motorNumber, order = instruction.split(" ", 1)
-                    
-                    command, value = order.split(' ')
-                    if(command == "freq"):
-                        self.setFreq(float(value))
-                        
-                    self.updateMotor(int(motorNumber), order)
-        except ValueError:
-            print("Motor id number should be an integer")
-            return 
-        except IndexError:
-            print("Motor id number must be in [0,4]")
-            return 
             
         for motor in self.motors:
             command = motor.asCommand()
