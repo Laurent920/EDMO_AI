@@ -6,18 +6,28 @@ import re
 import aioconsole
 from Utilities.Helpers import toTime
 from datetime import datetime, timedelta
+from pathlib import Path
+from GoPro.communicate_via_cohn import COHNCommunication
 
 
 class EDMOManual:
-    def __init__(self):
+    async def __init__(self):
         self.activeEDMOs: dict[str, FusedCommunicationProtocol] = {}
         self.activeSessions: dict[str, EDMOSession] = {}
+        self.goPros: dict[str, COHNCommunication] = {}
 
         self.fusedCommunication = FusedCommunication()
         self.fusedCommunication.onEdmoConnected.append(self.onEDMOConnected)
         self.fusedCommunication.onEdmoDisconnected.append(self.onEDMODisconnect)
 
         self.simpleViewEnabled = False
+        
+        folderPath = "./GoPro/"
+        for folderName in os.listdir(folderPath):
+            pattern = r"GoPro \d{4}"
+            if re.match(pattern, folderName):
+                self.goPros[folderName] = await COHNCommunication(
+                    Path(f"{folderPath}{folderName}/credentials.txt"))
     
     # region EDMO MANAGEMENT
 

@@ -12,24 +12,38 @@ import aioconsole
 
 import requests
 
-from _init_ import logger
+from _init_ import connect_ble, logger, ResponseManager
 
-class COHN_communication():
-    def __init__(self, credentials: Path) -> None:
+
+class COHNCommunication():
+    async def __init__(self, credentials: Path) -> None:
         try:
             arguments = ''
             with open(credentials, 'r') as cred:
-                arguments = cred.read()
+                arguments = cred.read() 
                 
             splits = arguments.split(" ", 3)
             self.username = splits[0]
             self.password = splits[1]
             self.ip_address = splits[2]
             self.certificate =  splits[3]
+            
+            gopro_id = credentials.parts[-2]
+            await self.gopro_ble_conenct(gopro_id)
         except Exception as e:
             logger.info(e)
             logger.info("Give the file 'credentials.txt' created by provision_cohn.py")
             
+            
+    async def gopro_ble_conenct(identifier):
+        # Connects to the gopro via bluetooth to be sure that it's on
+        manager = ResponseManager()
+        try:
+            await connect_ble(manager.notification_handler, identifier)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error(repr(exc))
+        
+        
     async def send_command(self, command: str):
         match command:
             case 'start':
@@ -67,7 +81,7 @@ class COHN_communication():
             print('Make sure the GoPro is turned on')
 
 
-async def main(cohn_com: COHN_communication):
+async def main(cohn_com: COHNCommunication):
     while(True):
         instructions = await asyncio.gather(
                                 aioconsole.ainput("Enter command: "),
@@ -83,7 +97,7 @@ if __name__ == "__main__":
     parser.add_argument("credentials", type=str, help='Path to credentials')
     args = parser.parse_args()
     
-    cohn_com = COHN_communication(Path(args.credentials)) 
+    cohn_com = COHNCommunication(Path(args.credentials)) 
     
     asyncio.run(main(cohn_com))
 
