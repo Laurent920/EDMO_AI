@@ -1,0 +1,11 @@
+GoPro 6665 wifi:
+GP24896665 5mD-rbc-rzc
+
+
+install needed:
+bleak
+pytz
+tzlocal
+google
+requests
+pip install --upgrade protobuf
