@@ -14,6 +14,7 @@ import google.protobuf.message
 from . import response_generic_pb2
 import sys
 import typing
+import ipaddress
 
 if sys.version_info >= (3, 10):
     import typing as typing_extensions
@@ -270,7 +271,7 @@ class RequestConnectNew(google.protobuf.message.Message):
     "AP SSID"
     password: builtins.str
     "AP password"
-    static_ip: builtins.bytes
+    static_ip: builtins.bytes #= int(ipaddress.IPv4Address('192.168.0.199')).to_bytes(4, byteorder='big')
     "Static IP address"
     gateway: builtins.bytes
     "Gateway IP address"

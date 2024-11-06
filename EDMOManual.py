@@ -7,14 +7,15 @@ import aioconsole
 from Utilities.Helpers import toTime
 from datetime import datetime, timedelta
 from pathlib import Path
-from GoPro.communicate_via_cohn import COHNCommunication
+from GoPro.COHN.communicate_via_cohn import COHNCommunication
+from GoPro.wifi.WifiCommunication import WifiCommunication
 
 
 class EDMOManual:
-    async def __init__(self):
+    def __init__(self, dataPath:str = None):
         self.activeEDMOs: dict[str, FusedCommunicationProtocol] = {}
         self.activeSessions: dict[str, EDMOSession] = {}
-        self.goPros: dict[str, COHNCommunication] = {}
+        self.goPros: dict[str, WifiCommunication|COHNCommunication] = {}
 
         self.fusedCommunication = FusedCommunication()
         self.fusedCommunication.onEdmoConnected.append(self.onEDMOConnected)
@@ -22,12 +23,16 @@ class EDMOManual:
 
         self.simpleViewEnabled = False
         
+        self.dataPath = dataPath
+                
+        # GoPro 
         folderPath = "./GoPro/"
         for folderName in os.listdir(folderPath):
-            pattern = r"GoPro \d{4}"
+            pattern = r"GoPro 6665" #\d{4}"
             if re.match(pattern, folderName):
-                self.goPros[folderName] = await COHNCommunication(
-                    Path(f"{folderPath}{folderName}/credentials.txt"))
+                print(f"Getting credentials from : {folderPath}{folderName}/")
+                self.goPros[folderName] = WifiCommunication(folderName,
+                    Path(f"{folderPath}{folderName}/"))
     
     # region EDMO MANAGEMENT
 
@@ -38,11 +43,17 @@ class EDMOManual:
         
         print("Edmo " + identifier + " connected") 
         self.activeSessions[identifier] = EDMOSession(
-            protocol, 4, self.removeSession
+            protocol, 4, self.removeSession, self.dataPath
         )
+        
+        # TODO test how much delay we get between session and gopro
+        for gopro_id in self.goPros:
+            print(f"Sending start command to gopro in edmoConnected {gopro_id}")
+            self.goPros[gopro_id].send_command('start')
         
         for i in range(4):
             self.activeSessions[identifier].registerManualPlayer()
+            
 
     def onEDMODisconnect(self, protocol: FusedCommunicationProtocol):
         # Assumption: protocol is non null
@@ -52,6 +63,19 @@ class EDMOManual:
         print("Edmo " + identifier + " disconnected") 
         if identifier in self.activeEDMOs:
             del self.activeEDMOs[identifier]
+        
+        self.GoProOff()
+            
+    def GoProOff(self):
+        for gopro_id in self.goPros:
+            self.goPros[gopro_id].send_command('stop')
+            
+    def logVideoFile(self):
+        for gopro_id in self.goPros:
+            response = self.goPros[gopro_id].send_command('get last video', self.dataPath)
+        
+            for session_id in self.activeSessions:
+                self.activeSessions[session_id].sessionLog.write("Session", f'GoPro {gopro_id} : {response}')
             
     def removeSession(self, session: EDMOSession):
         identifier = session.protocol.identifier
@@ -85,7 +109,8 @@ class EDMOManual:
             for player in session.activePlayers:
                 player.reset()
                 
-    async def fileInput(self, id, data:list[str], nbInstructions):
+                
+    async def runInputFile(self, id, data:list[str], nbInstructions):
         print("reading file...")    
         # print(data)
         # print(nbInstructions)
@@ -111,59 +136,84 @@ class EDMOManual:
                 await session.activePlayers[int(id)].onMessage(cur_split[1])
         print("finished reading file")
     
-    async def manualInput(self):
-        # instructions to use: 
+    
+    async def parseInputFile(self, instructions):
+        # instructions must be of type: 
         # c motor_id 'amp'/'off'/'freq'/'phb' float (ex: c 3 amp 13.5)
         # f path (ex: cleanData/2024.09.24/Kumoko/12.02.51)
+        instruction = instructions.split(" ", 1)
+        data = None
+        match (instruction[0]):
+            case "c":
+                print(f'Sending instruction: {instruction[1]}')
+                motorNumber, command = instruction[1].split(" ", 1)
+                for sessionID in self.activeSessions:
+                    session = self.activeSessions[sessionID] 
+                    await session.activePlayers[int(motorNumber)].onMessage(command)
+            case "f":
+                filepath = instruction[1]
+                data = {}
+                nbInstructions = {}
+                print(os.getcwd())
+                filepath = os.path.abspath(filepath)
+                for filename in os.listdir(filepath):
+                    pattern = r"^Input_Player[0-9]*\.log$"
+                    if re.match(pattern, filename):
+                        data[filename[12]] = (open(os.path.join(filepath, filename), "r").read()).splitlines()
+                        nbInstructions[filename[12]] = (len(data[filename[12]]) - 1)
+                if not data:    
+                    print("No Input_Player in this folder ==> ending the run")
+                    
+                    
+                loop = asyncio.get_event_loop()
+                tasks = []
+                for key in data.keys():
+                    task = loop.create_task(self.runInputFile(key, data[key], nbInstructions[key]))
+                    tasks.append(task)
+                await asyncio.gather(*tasks)
+                return True
+            case "reset":
+                print("Resetting")
+                self.reset()
+            case "help":
+                print("""instructions to use: 
+                    single control: c motor_id 'amp'/'off'/'freq'/'phb' float (ex: c 3 amp 13.5) 
+                    replay file   : f path (ex: cleanData/2024.09.24/Kumoko/12.02.51)""")
+            case _:
+                print("wrong instruction flag")
+                pass      
+    
+    
+    async def manualInput(self):
         while(True):
             instructions = await asyncio.gather(
-                            aioconsole.ainput(),
+                            aioconsole.ainput('Enter command or file to read (Enter help for help): '),
                         )
-            instruction = instructions[0].split(" ", 1)
+            instruction = instructions[0]
             
-            data = None
-            match (instruction[0]):
-                case "c":
-                    print(f'Sending instruction: {instruction[1]}')
-                    motorNumber, command = instruction[1].split(" ", 1)
-                    for sessionID in self.activeSessions:
-                        session = self.activeSessions[sessionID] 
-                        await session.activePlayers[int(motorNumber)].onMessage(command)
-                case "f":
-                    filepath = instruction[1]
-                    data = {}
-                    nbInstructions = {}
-                    for filename in os.listdir(filepath):
-                        pattern = r"^Input_Player[0-9]*\.log$"
-                        if re.match(pattern, filename):
-                            data[filename[12]] = (open(os.path.join(filepath, filename), "r").read()).splitlines()
-                            nbInstructions[filename[12]] = (len(data[filename[12]]) - 1)
-                            
-                    loop = asyncio.get_event_loop()
-                    tasks = []
-                    for key in data.keys():
-                        task = loop.create_task(self.fileInput(key, data[key], nbInstructions[key]))
-                        tasks.append(task)
-                    await asyncio.gather(*tasks)
-                        
-                case "reset":
-                    print("Resetting")
-                    self.reset()
-                case _:
-                    print("wrong instruction flag")
-                    pass        
+            await self.parseInputFile(instruction)      
         
     async def run(self) -> None:
+        for gopro_id in self.goPros:
+            await self.goPros[gopro_id].create()
+        
         await self.fusedCommunication.initialize()
 
+        if self.dataPath:
+            replayFile = asyncio.get_event_loop().create_task(self.parseInputFile("f " + self.dataPath))
+        
         closed = False
-        asyncio.get_event_loop().create_task(self.manualInput())
-
+        print(f'datapath:{self.dataPath}')
         try:
             while not closed:   
+                # print(f'closed:{closed}, done: {replayFile.done()}')
                 await self.update()
+                if self.dataPath and replayFile.done():
+                    closed = True
         except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
+            await self.onShutdown()
             pass
+        await self.onShutdown()
 
     async def onShutdown(self, app: None = None):
         print("Cleaning up")
@@ -176,6 +226,7 @@ class EDMOManual:
     
 async def main():
     server = EDMOManual()
+    asyncio.get_event_loop().create_task(server.manualInput())
     await server.run()
 
 

@@ -9,3 +9,19 @@ tzlocal
 google
 requests
 pip install --upgrade protobuf
+
+
+
+sdk_wireless_camera_control:
+python -m pip install :-
+rich
+construct
+bleak
+pexpect
+packaging
+pytz
+pydantic
+tzlocal
+--upgrade google-api-python-client
+wrapt
+zeroconf

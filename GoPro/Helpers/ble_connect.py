@@ -10,7 +10,7 @@ from typing import Any
 from bleak import BleakScanner, BleakClient
 from bleak.backends.device import BLEDevice as BleakDevice
 
-from _init_ import logger, noti_handler_T
+from GoPro import logger, noti_handler_T
 
 
 def exception_handler(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:

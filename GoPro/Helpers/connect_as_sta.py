@@ -7,7 +7,7 @@ import argparse
 from typing import Generator, Final
 
 from bleak import BleakClient
-from _init_ import GoProUuid, connect_ble, proto, logger, ResponseManager
+from GoPro import GoProUuid, connect_ble, proto, logger, ResponseManager
 
 
 def yield_fragmented_packets(payload: bytes) -> Generator[bytes, None, None]:

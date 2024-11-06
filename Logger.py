@@ -4,12 +4,17 @@ import os
 
 
 class SessionLogger:
-    def __init__(self, name: str):
+    def __init__(self, name: str, dataPath: str = None):
         self.name = name
         self.channels = dict[str, list[str]]()
         self.sessionStartTime = datetime.now()
         self.lastFlushTime = self.sessionStartTime
-        path = self.directoryName = f"./SessionLogs/{self.sessionStartTime.strftime(f"%Y.%m.%d/{self.name}/%H.%M.%S")}"
+        if dataPath:
+            self.blockWrite = True 
+            path = self.directoryName = dataPath
+        else:
+            self.blockWrite = False
+            path = self.directoryName = f"./SessionLogs/{self.sessionStartTime.strftime(f"%Y.%m.%d/{self.name}/%H.%M.%S")}"
 
         if not os.path.exists(path):
             os.makedirs(path)
@@ -17,6 +22,8 @@ class SessionLogger:
         pass
 
     def write(self, channel: str, message: str):
+        if self.blockWrite and (channel != 'IMU_replay' or channel != 'Session'):
+            return
         if channel not in self.channels:
             self.channels[channel] = []
 

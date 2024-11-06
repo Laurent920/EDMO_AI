@@ -12,8 +12,8 @@ from bleak import BleakClient
 from bleak.backends.characteristic import BleakGATTCharacteristic
 from google.protobuf.message import Message as ProtobufMessage
 
-from _init_ import logger, proto
-from _init_ import GoProUuid, connect_ble, Response, QueryResponse, TlvResponse, ProtobufResponse, Resolution
+from GoPro import logger, proto
+from GoPro import GoProUuid, connect_ble, Response, QueryResponse, TlvResponse, ProtobufResponse, Resolution
 
 RESOLUTION_ID = 2
 

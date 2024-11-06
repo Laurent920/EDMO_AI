@@ -170,16 +170,16 @@ def writeToLog(motorData, timesToRemove, path):
                 print(f'Row deleted for index {index-1}: {count}, final size: {len(motorData[index])-count}')
                 index += 1
     # Plot removed timestamps
-    timesToRemove = (list(sorted(timesToRemove)))
-    for i, r in enumerate(deletedRows):
-        deleted_indices = [timesToRemove.index(time) for time in r]
-        plt.eventplot(np.array(deleted_indices)[:,np.newaxis], lineoffsets=[i+1] * len(deleted_indices), orientation="vertical", colors='r', linelengths=0.1)
-    plt.xticks([1,2,3,4,5], ['IMU', 'Motor0', 'Motor1', 'Motor2', 'Motor3'])
-    plt.yticks(np.arange(0, len(timesToRemove), 1), np.array(timesToRemove))
-    plt.title(path)
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    # timesToRemove = (list(sorted(timesToRemove)))
+    # for i, r in enumerate(deletedRows):
+    #     deleted_indices = [timesToRemove.index(time) for time in r]
+    #     plt.eventplot(np.array(deleted_indices)[:,np.newaxis], lineoffsets=[i+1] * len(deleted_indices), orientation="vertical", colors='r', linelengths=0.1)
+    # plt.xticks([1,2,3,4,5], ['IMU', 'Motor0', 'Motor1', 'Motor2', 'Motor3'])
+    # plt.yticks(np.arange(0, len(timesToRemove), 1), np.array(timesToRemove))
+    # plt.title(path)
+    # plt.grid(True)
+    # plt.tight_layout()
+    # plt.show()
 
 if __name__ == "__main__":
     readMulti = True
@@ -187,25 +187,27 @@ if __name__ == "__main__":
 
     if readMulti:
         # path = './DataBloom/2024.09.16/'
-        # path = './SessionLogs/2024.09.13/'
+        path = './SessionLogs/'
         # path = './DataSmallEDMO/2024.09.07/'
-        path = './DataCorosectPC/2024.09.24/'
+        # path = './DataCorosectPC/2024.09.24/'
         for folder in os.listdir(path):  # Read folders of folders
             print(folder)
-            newPath = path + folder + '/'
-            for filename in os.listdir(newPath):
-                readFile = True
-                if False:  #folder != 'Ramirez': # Restrict read to one folder
-                    readFile = False
+            for edmo_folder in os.listdir(path + folder):
+                
+                newPath = path + folder + '/' + edmo_folder + '/'
+                for filename in os.listdir(newPath):
+                    readFile = True
+                    if False:  #folder != 'Ramirez': # Restrict read to one folder
+                        readFile = False
 
-                if readFile:
-                    print(filename)
-                    location = newPath + filename
-                    motorData = readLog(location)
-                    timesToRemove = cleanLog(motorData)
-                    removeLogDuplicates(motorData)
-                    writeToLog(motorData, timesToRemove, location)
-                    print('__________________')
+                    if readFile:
+                        print(filename)
+                        location = newPath + filename
+                        motorData = readLog(location)
+                        timesToRemove = cleanLog(motorData)
+                        removeLogDuplicates(motorData)
+                        writeToLog(motorData, timesToRemove, location)
+                        print('__________________')
 
     if readOneFile:
         path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'

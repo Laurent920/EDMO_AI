@@ -195,8 +195,11 @@ class EDMOSession:
         protocol: FusedCommunicationProtocol,
         numberPlayers: int,
         sessionRemoval: Callable[[Self], None],
+        dataPath: str = None
     ):
-        self.sessionLog = SessionLogger(protocol.identifier)
+        self.dataPath = dataPath
+        self.manual = False
+        self.sessionLog = SessionLogger(protocol.identifier, dataPath)
         self.removeSelf = sessionRemoval
 
         self.usedNumbers = 0
@@ -246,6 +249,7 @@ class EDMOSession:
         self.waitingPlayers.append(manualPlayer)
         manualPlayer.onConnect()
         
+        self.manual = True
         return True
 
     # The player finally connected
@@ -382,6 +386,9 @@ class EDMOSession:
 
     async def close(self):
         await self.sessionLog.flush()
+        
+        if self.manual:
+            return
 
         for p in self.activePlayers:
             await p.rtc.close()
@@ -434,7 +441,10 @@ class EDMOSession:
 
         final = f"{{{accelaration},{gyroscope},{magnetic},{gravity}, {rotation}}}"
 
-        self.sessionLog.write("IMU", final)
+        if self.dataPath:
+            self.sessionLog.write("IMU_replay", final)
+        else:
+            self.sessionLog.write("IMU", final)
         pass
 #endregion
 

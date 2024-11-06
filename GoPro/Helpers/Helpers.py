@@ -10,7 +10,7 @@ import requests
 
 from google.protobuf.message import Message as ProtobufMessage
 
-from _init_ import GOPRO_BASE_UUID, GOPRO_BASE_URL, logger, connect_ble
+from GoPro import GOPRO_BASE_UUID, GOPRO_BASE_URL, logger, connect_ble
 
 # region ble_command_set_shutter
 T = TypeVar("T")
