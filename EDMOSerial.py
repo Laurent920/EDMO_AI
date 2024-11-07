@@ -37,6 +37,8 @@ class SerialProtocol(asyncio.Protocol):
             callback(self)
 
     def data_received(self, data):
+        if self.closed:
+            return
         for i in range(0, len(data)):
             self.receiveBuffer.append(data[i])
 
@@ -66,7 +68,7 @@ class SerialProtocol(asyncio.Protocol):
             self.handlePacket(bytes(self.receiveBuffer))
             self.receiveBuffer = bytearray()
 
-    def handlePacket(self, data: bytes):
+    def handlePacket(self, data: bytes):        
         command = EDMOPacket.tryParse(data)
 
         if self.identifying:

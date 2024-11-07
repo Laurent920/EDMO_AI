@@ -48,29 +48,22 @@ class WifiCommunication():
                 logger.info(e)
                 logger.info("Give the path to the folder ./GoPro/GoPro XXXX/ where ssid.txt is.")
             
-        self.created = False
+        self.initialized = False
         
         
-    async def create(self):
-        await asyncio.run(self.enable_wifi(self.ssid, self.password))
+    async def initialize(self):
+        await self.enable_wifi(self.ssid, self.password)
         
-        for i in range(5):
-            if self.connect_wifi():
-                self.created = True
-                return
-            else:
-                if i == 0:
-                    logger.info(f"""For first time connection on a device please connect to gopro's wifi manually using :
-                                ssid: {self.ssid}, password: {self.password}""")
-                logger.info(f"Reattempting to connect {i+1}/5")
+        self.connect_wifi()
         
-        raise ValueError("Unable to connect to the gopro's wifi")
+        self.initialized = True
     
 
     async def enable_wifi(self, ssid: str|None = None, password: str|None = None) -> None:
         """Connect to a GoPro via BLE, find its WiFi AP SSID and password if not given, and enable its WiFI AP"""
         
         # Synchronization event to wait until notification response is received
+        event = asyncio.Event()
         client: BleakClient
 
         async def notification_handler(characteristic: BleakGATTCharacteristic, data: bytearray) -> None:
@@ -85,7 +78,7 @@ class WifiCommunication():
                 logger.error("Unexpected response")
 
             # Notify the writer
-            self.event.set()
+            event.set()
 
         client = await connect_ble(notification_handler, self.gopro_id)
 
@@ -111,37 +104,52 @@ class WifiCommunication():
 
         # Write to the Command Request BleUUID to enable WiFi
         logger.info("Enabling the WiFi AP")
-        self.event.clear()
+        event.clear()
         request = bytes([0x03, 0x17, 0x01, 0x01])
         command_request_uuid = GoProUuid.COMMAND_REQ_UUID
         logger.debug(f"Writing to {command_request_uuid}: {request.hex(':')}")
         await client.write_gatt_char(command_request_uuid.value, request, response=True)
-        await self.event.wait()  # Wait to receive the notification response
+        await event.wait()  # Wait to receive the notification response
         logger.info("WiFi AP is enabled")
         
+        await client.disconnect()
 
-    def connect_wifi(self):
-        # Attempt to connect
-        logger.info(f"Connecting to the gopro wifi: {self.ssid}")   
-        response = subprocess.run(f'netsh wlan connect name="{self.ssid}"', capture_output=True, text=True, shell=True)
-        if response.returncode != 0:
-            logger.info(f"Connection failed: {response.stderr}")
-            return False
         
-        # Confirm connection by checking the network status
-        time.sleep(5)
+    def connect_wifi(self):
+        for i in range(5):
+            # Attempt to connect
+            logger.info(f"Connecting to the gopro wifi: {self.ssid}")   
+            response = subprocess.run(f'netsh wlan connect name="{self.ssid}"', capture_output=True, text=True, shell=True)
+            if response.returncode != 0:
+                logger.info(f"Connection failed: {response.stderr}")
+                continue
+            
+            # Confirm connection by checking the network status
+            time.sleep(5)
+            try:
+                if self.verify_wifi_connection():
+                    return 
+            except ValueError:
+                pass
+            if i == 0:
+                logger.info(f"""For first time connection on a device please connect to gopro's wifi manually using :
+                            ssid: {self.ssid}, password: {self.password}""")
+            logger.info(f"Reattempting to connect {i+1}/5")       
+        raise ValueError("Unable to connect to the gopro's wifi")
+            
+    
+    def verify_wifi_connection(self):
         check_response = subprocess.run("netsh wlan show interfaces", capture_output=True, text=True, shell=True)
         if self.ssid in check_response.stdout:
             logger.info('Succesfully connected to the wifi')
             return True
         else:
-            return False
-        
-        
+            raise ValueError("Unable to connect to the gopro's wifi")
     def send_command(self, command:str, savePath:str = None):
-        if not self.created:
-            logger.error("WifiCommunication has not been created yet, call create() first.")
-            return
+        if not self.initialized:
+            # self.verify_wifi_connection()
+            self.initialized = True
+            
         download_video = False
         file = ''
         querystring = {}
@@ -189,26 +197,33 @@ class WifiCommunication():
         logger.info("Command sent successfully")
         
         logger.info(response)
-        rsp = response.json()
-        logger.info(rsp)
         if download_video:
             if not savePath:
                 logger.error("savePath argument is missing in send_command ==> saving in current directory...")
                 savePath = os.getcwd()
-                
-            if 'file' in rsp.keys():
-                file = rsp['file']
-                url = GOPRO_BASE_URL + f"/videos/DCIM/100GOPRO/{file}"
-                response = requests.get(url, timeout=10)            
-                logger.info(response)
             
+            try:
+                rsp = response.json()
+                logger.info(rsp)
+                for i in range(3):
+                    if 'file' in rsp.keys():
+                        file = rsp['file']
+                        url = GOPRO_BASE_URL + f"/videos/DCIM/100GOPRO/{file}"
+                        response = requests.get(url, timeout=10)            
+                        logger.info(response)
+                    if response.status_code == 200:
+                        break
+                    else:
+                        print(f"Error response code, failed to retrieve the video retrying... {i+1}/3")
+            except:
+                pass
             savePath = Path(savePath) / Path(file)
             logger.info(f"Saving video {file} at {savePath}")
             open(savePath, 'wb').write(response.content)
 
 
 async def main(wifi_com: WifiCommunication):
-    await wifi_com.create()
+    await wifi_com.initialize()
     print('Enter quit to stop the program')
     while(True):
         instructions = await asyncio.gather(
@@ -218,7 +233,8 @@ async def main(wifi_com: WifiCommunication):
         if command == 'quit':
             return
         splits:str = command.split('-', 2)
-        wifi_com.send_command(splits[0], splits[1])
+        path = None if len(splits) < 2 else splits[1]
+        wifi_com.send_command(splits[0], path)
 
 
 if __name__ == "__main__":
@@ -240,7 +256,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     wifi_com = WifiCommunication(args.identifier, Path(args.path))
-    try:
-        asyncio.run(main(wifi_com))
-    except ValueError as e:
-        logger.error(e)
+    
+    asyncio.run(main(wifi_com))

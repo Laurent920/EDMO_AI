@@ -62,7 +62,7 @@ class EDMOUdp(DatagramProtocol):
         # Broadcast the id command to all peers
         # If an EDMO exist, we'll receive their identifier along with their IP
         self.transport.sendto(
-            EDMOPacket.create(EDMOCommands.IDENTIFY), ("255.255.255.255", 2121)
+            EDMOPacket.create(EDMOCommands.IDENTIFY), ("255.255.255.255", 2122)
         )
 
     # We want to ensure that if an EDMO doesn't respond

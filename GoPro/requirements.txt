@@ -1,27 +1,6 @@
-GoPro 6665 wifi:
-GP24896665 5mD-rbc-rzc
-
-
-install needed:
 bleak
 pytz
 tzlocal
 google
 requests
 pip install --upgrade protobuf
-
-
-
-sdk_wireless_camera_control:
-python -m pip install :-
-rich
-construct
-bleak
-pexpect
-packaging
-pytz
-pydantic
-tzlocal
---upgrade google-api-python-client
-wrapt
-zeroconf

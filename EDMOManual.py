@@ -3,6 +3,7 @@ from EDMOSession import EDMOSession
 from FusedCommunication import FusedCommunication, FusedCommunicationProtocol
 import os
 import re
+import time
 import aioconsole
 from Utilities.Helpers import toTime
 from datetime import datetime, timedelta
@@ -12,32 +13,48 @@ from GoPro.wifi.WifiCommunication import WifiCommunication
 
 
 class EDMOManual:
-    def __init__(self, dataPath:str = None):
+    def __init__(self):
         self.activeEDMOs: dict[str, FusedCommunicationProtocol] = {}
         self.activeSessions: dict[str, EDMOSession] = {}
-        self.goPros: dict[str, WifiCommunication|COHNCommunication] = {}
+        self.goPros: dict[str, WifiCommunication] = {}
 
         self.fusedCommunication = FusedCommunication()
         self.fusedCommunication.onEdmoConnected.append(self.onEDMOConnected)
         self.fusedCommunication.onEdmoDisconnected.append(self.onEDMODisconnect)
+        
+        self.protocol:FusedCommunicationProtocol
+        self.dataPath:str = None
 
         self.simpleViewEnabled = False
         
-        self.dataPath = dataPath
-                
-        # GoPro 
+        self.connected = asyncio.Condition()
+        
+        self.closed = False
+         # GoPro 
         folderPath = "./GoPro/"
         for folderName in os.listdir(folderPath):
             pattern = r"GoPro 6665" #\d{4}"
             if re.match(pattern, folderName):
-                print(f"Getting credentials from : {folderPath}{folderName}/")
+                print(f"Getting credentials from : {folderPath}{folderName}/\t in EDMOManual init")
                 self.goPros[folderName] = WifiCommunication(folderName,
                     Path(f"{folderPath}{folderName}/"))
     
+    async def initialize(self, dataPath:str = None):
+        self.closed = False
+        self.dataPath = dataPath
+            
+        identifier = self.protocol.identifier
+        self.activeEDMOs[identifier] = self.protocol
+        
+        print("Edmo " + identifier + " connected") 
+        self.activeSessions[identifier] = EDMOSession(
+            self.protocol, 4, self.removeSession, self.dataPath
+        )
     # region EDMO MANAGEMENT
 
     def onEDMOConnected(self, protocol: FusedCommunicationProtocol):
         # Assumption: protocol is non null
+        self.protocol = protocol
         identifier = protocol.identifier
         self.activeEDMOs[identifier] = protocol
         
@@ -53,7 +70,12 @@ class EDMOManual:
         
         for i in range(4):
             self.activeSessions[identifier].registerManualPlayer()
-            
+        
+        asyncio.create_task(self._notify())
+
+    async def _notify(self):
+        async with self.connected:
+            self.connected.notify_all()
 
     def onEDMODisconnect(self, protocol: FusedCommunicationProtocol):
         # Assumption: protocol is non null
@@ -65,6 +87,8 @@ class EDMOManual:
             del self.activeEDMOs[identifier]
         
         self.GoProOff()
+        time.sleep(2)
+        self.logVideoFile()
             
     def GoProOff(self):
         for gopro_id in self.goPros:
@@ -72,10 +96,7 @@ class EDMOManual:
             
     def logVideoFile(self):
         for gopro_id in self.goPros:
-            response = self.goPros[gopro_id].send_command('get last video', self.dataPath)
-        
-            for session_id in self.activeSessions:
-                self.activeSessions[session_id].sessionLog.write("Session", f'GoPro {gopro_id} : {response}')
+            self.goPros[gopro_id].send_command('get last video', self.dataPath)
             
     def removeSession(self, session: EDMOSession):
         identifier = session.protocol.identifier
@@ -111,9 +132,7 @@ class EDMOManual:
                 
                 
     async def runInputFile(self, id, data:list[str], nbInstructions):
-        print("reading file...")    
-        # print(data)
-        # print(nbInstructions)
+        print(f"reading player {id} ...")  
         for i in range(nbInstructions - 1):
             cur_split = data[i].split(': ')
             next_split = data[i+1].split(': ')
@@ -121,23 +140,27 @@ class EDMOManual:
             c = datetime.strptime(cur_split[0],"%H:%M:%S.%f")
             n = datetime.strptime(next_split[0],"%H:%M:%S.%f")
             cur_timedelta = timedelta(hours=c.hour, minutes=c.minute, seconds=c.second)
-            # print(cur_split)
             if i == 0:
                 delay = cur_timedelta.total_seconds()
                 print(delay)
                 await asyncio.sleep(delay)
             else:
                 delay = (n-c).total_seconds()
-                print(delay)
+                if delay > 10.0:
+                    print(delay)
                 await asyncio.sleep(delay)
             
             for sessionID in self.activeSessions:
                 session = self.activeSessions[sessionID]
                 await session.activePlayers[int(id)].onMessage(cur_split[1])
-        print("finished reading file")
+        await asyncio.sleep(5)
+        print(f"finished reading player {id}")
     
     
     async def parseInputFile(self, instructions):
+        async with self.connected:
+            print("waiting for active sessions 156 EDMOManual")
+            await self.connected.wait_for(lambda: bool(self.activeSessions))
         # instructions must be of type: 
         # c motor_id 'amp'/'off'/'freq'/'phb' float (ex: c 3 amp 13.5)
         # f path (ex: cleanData/2024.09.24/Kumoko/12.02.51)
@@ -154,7 +177,6 @@ class EDMOManual:
                 filepath = instruction[1]
                 data = {}
                 nbInstructions = {}
-                print(os.getcwd())
                 filepath = os.path.abspath(filepath)
                 for filename in os.listdir(filepath):
                     pattern = r"^Input_Player[0-9]*\.log$"
@@ -163,7 +185,6 @@ class EDMOManual:
                         nbInstructions[filename[12]] = (len(data[filename[12]]) - 1)
                 if not data:    
                     print("No Input_Player in this folder ==> ending the run")
-                    
                     
                 loop = asyncio.get_event_loop()
                 tasks = []
@@ -185,47 +206,58 @@ class EDMOManual:
     
     
     async def manualInput(self):
+        while len(self.activeEDMOs) < 1:
+            await asyncio.sleep(1)
+            
         while(True):
             instructions = await asyncio.gather(
                             aioconsole.ainput('Enter command or file to read (Enter help for help): '),
                         )
             instruction = instructions[0]
-            
+                
             await self.parseInputFile(instruction)      
         
-    async def run(self) -> None:
-        for gopro_id in self.goPros:
-            await self.goPros[gopro_id].create()
         
+    async def run(self) -> None:
         await self.fusedCommunication.initialize()
 
         if self.dataPath:
             replayFile = asyncio.get_event_loop().create_task(self.parseInputFile("f " + self.dataPath))
         
-        closed = False
-        print(f'datapath:{self.dataPath}')
         try:
-            while not closed:   
-                # print(f'closed:{closed}, done: {replayFile.done()}')
+            while not self.closed:   
                 await self.update()
                 if self.dataPath and replayFile.done():
-                    closed = True
+                    self.closed = True
         except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
             await self.onShutdown()
             pass
-        await self.onShutdown()
+        await self.close()
+        
+    async def close(self):
+        self.closed = True
+        for s in [sess for sess in self.activeSessions]:
+            session = self.activeSessions[s]
+            await session.close()
+            
 
     async def onShutdown(self, app: None = None):
         print("Cleaning up")
         """Shuts down existing connections gracefully to prevent a minor deadlock when shutting down the server"""
-        self.fusedCommunication.close()
+        
         for s in [sess for sess in self.activeSessions]:
             session = self.activeSessions[s]
             await session.close()
+        await asyncio.sleep(3)
+
+        # self.onEDMODisconnect(self.fusedCommunication)
+        self.fusedCommunication.close()
+        await asyncio.sleep(3)
         pass
     
 async def main():
     server = EDMOManual()
+    server.initialize()
     asyncio.get_event_loop().create_task(server.manualInput())
     await server.run()
 

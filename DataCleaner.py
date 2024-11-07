@@ -4,6 +4,8 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 from Utilities.Helpers import toTime
+import time
+start_time = time.time()
 
 printInfo = False
 printDebugInfo = False
@@ -190,15 +192,16 @@ if __name__ == "__main__":
         path = './SessionLogs/'
         # path = './DataSmallEDMO/2024.09.07/'
         # path = './DataCorosectPC/2024.09.24/'
+        readFile = False
+
         for folder in os.listdir(path):  # Read folders of folders
             print(folder)
             for edmo_folder in os.listdir(path + folder):
-                
+                print(edmo_folder)
                 newPath = path + folder + '/' + edmo_folder + '/'
                 for filename in os.listdir(newPath):
-                    readFile = True
-                    if False:  #folder != 'Ramirez': # Restrict read to one folder
-                        readFile = False
+                    if folder == f'2024.10.17': # Restrict read to one folder
+                        readFile = True
 
                     if readFile:
                         print(filename)
@@ -208,6 +211,9 @@ if __name__ == "__main__":
                         removeLogDuplicates(motorData)
                         writeToLog(motorData, timesToRemove, location)
                         print('__________________')
+                    else:
+                        print('skipping')
+    print("--- %s seconds ---" % (time.time() - start_time))
 
     if readOneFile:
         path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'
@@ -217,3 +223,4 @@ if __name__ == "__main__":
         timesToRemove = cleanLog(motorData)
         writeToLog(motorData, timesToRemove, path)
 
+# Refaire 2024.09.19/Cadence/10.13.50

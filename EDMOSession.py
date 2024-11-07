@@ -388,6 +388,8 @@ class EDMOSession:
         await self.sessionLog.flush()
         
         if self.manual:
+            self.protocol.onConnectionEstablished = None
+            self.removeSelf(self)
             return
 
         for p in self.activePlayers:

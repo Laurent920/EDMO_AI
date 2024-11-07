@@ -132,3 +132,5 @@ class FusedCommunication:
     def close(self):
         self.serial.close()
         self.udp.close()
+        self.onEdmoConnected= []
+        # self.onEdmoDisconnected= []
