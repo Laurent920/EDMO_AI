@@ -28,7 +28,7 @@ class EDMOManual:
         self.simpleViewEnabled = False
         
         self.connected = asyncio.Condition()
-        
+        self.initialized = False
         self.closed = False
          # GoPro 
         folderPath = "./GoPro/"
@@ -38,18 +38,18 @@ class EDMOManual:
                 print(f"Getting credentials from : {folderPath}{folderName}/\t in EDMOManual init")
                 self.goPros[folderName] = WifiCommunication(folderName,
                     Path(f"{folderPath}{folderName}/"))
+                
+        asyncio.get_event_loop().create_task(self.fusedCommunication.initialize())
+
     
     async def initialize(self, dataPath:str = None):
         self.closed = False
+        self.initialized = True
+        
+        print(f"Initializing with data path: {dataPath}")
         self.dataPath = dataPath
             
-        identifier = self.protocol.identifier
-        self.activeEDMOs[identifier] = self.protocol
-        
-        print("Edmo " + identifier + " connected") 
-        self.activeSessions[identifier] = EDMOSession(
-            self.protocol, 4, self.removeSession, self.dataPath
-        )
+        self.onEDMOConnected(self.protocol)
     # region EDMO MANAGEMENT
 
     def onEDMOConnected(self, protocol: FusedCommunicationProtocol):
@@ -85,10 +85,6 @@ class EDMOManual:
         print("Edmo " + identifier + " disconnected") 
         if identifier in self.activeEDMOs:
             del self.activeEDMOs[identifier]
-        
-        self.GoProOff()
-        time.sleep(2)
-        self.logVideoFile()
             
     def GoProOff(self):
         for gopro_id in self.goPros:
@@ -159,7 +155,7 @@ class EDMOManual:
     
     async def parseInputFile(self, instructions):
         async with self.connected:
-            print("waiting for active sessions 156 EDMOManual")
+            print("waiting for active sessions 165 EDMOManual.py")
             await self.connected.wait_for(lambda: bool(self.activeSessions))
         # instructions must be of type: 
         # c motor_id 'amp'/'off'/'freq'/'phb' float (ex: c 3 amp 13.5)
@@ -219,13 +215,13 @@ class EDMOManual:
         
         
     async def run(self) -> None:
-        await self.fusedCommunication.initialize()
-
         if self.dataPath:
             replayFile = asyncio.get_event_loop().create_task(self.parseInputFile("f " + self.dataPath))
+        if self.initialized:
+            await self._notify()
         
         try:
-            while not self.closed:   
+            while not self.closed: 
                 await self.update()
                 if self.dataPath and replayFile.done():
                     self.closed = True
@@ -239,18 +235,17 @@ class EDMOManual:
         for s in [sess for sess in self.activeSessions]:
             session = self.activeSessions[s]
             await session.close()
+        
+        self.GoProOff()
+        time.sleep(2)
+        self.logVideoFile()
             
 
     async def onShutdown(self, app: None = None):
         print("Cleaning up")
         """Shuts down existing connections gracefully to prevent a minor deadlock when shutting down the server"""
-        
-        for s in [sess for sess in self.activeSessions]:
-            session = self.activeSessions[s]
-            await session.close()
-        await asyncio.sleep(3)
+        self.close()
 
-        # self.onEDMODisconnect(self.fusedCommunication)
         self.fusedCommunication.close()
         await asyncio.sleep(3)
         pass

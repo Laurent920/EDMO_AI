@@ -41,12 +41,13 @@ def cancel_all_tasks(exclude_current=False):
 
 async def experiment_replay(startFilePath: str=None):
     skip = True if startFilePath else False    
-    wifi_com = WifiCommunication("GoPro 6665")
-    await wifi_com.initialize()
+    # wifi_com = WifiCommunication("GoPro 6665")
+    # await wifi_com.initialize()
     server = EDMOManual()
     asyncio.get_event_loop().create_task(server.run())
-    await asyncio.sleep(2)
-    await server.close()
+    await asyncio.sleep(1)
+    server.closed = True
+    await asyncio.sleep(5)
 
     cwd = os.getcwd()
     date_dir = cwd + '\\cleanData'
