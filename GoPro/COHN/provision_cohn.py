@@ -289,9 +289,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        # python provision_cohn.py VOO-RWE86FA 9rMpcn7Cc3d4ccJxPb
-        # python provision_cohn.py iPhone Laurent1 -i "GoPro 6665"
-        # python provision_cohn.py devolo-111 MLZRGSBNSYZZEKGA
+        # python -m GoPro.COHN.provision_cohn  VOO-RWE86FA 9rMpcn7Cc3d4ccJxPb "GoPro 6665"
+        # python -m GoPro.COHN.provision_cohn  iPhone Laurent1 -i "GoPro 6665"
+        # python -m GoPro.COHN.provision_cohn  devolo-111 MLZRGSBNSYZZEKGA "GoPro 6665"
 
         # python -m GoPro.COHN.provision_cohn EDMO edmotest 'GoPro XXXX'
         identifier = args.identifier

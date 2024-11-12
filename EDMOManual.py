@@ -30,6 +30,7 @@ class EDMOManual:
         self.connected = asyncio.Condition()
         self.initialized = False
         self.closed = False
+        self.noInput = True
          # GoPro 
         folderPath = "./GoPro/"
         for folderName in os.listdir(folderPath):
@@ -86,18 +87,22 @@ class EDMOManual:
         if identifier in self.activeEDMOs:
             del self.activeEDMOs[identifier]
             
+            
     def GoProOff(self):
         for gopro_id in self.goPros:
             self.goPros[gopro_id].send_command('stop')
+            
             
     def logVideoFile(self):
         for gopro_id in self.goPros:
             self.goPros[gopro_id].send_command('get last video', self.dataPath)
             
+            
     def removeSession(self, session: EDMOSession):
         identifier = session.protocol.identifier
         if identifier in self.activeSessions:
             del self.activeSessions[identifier]
+            
             
     async def update(self, instruction=None):
         """Standard update loop to be performed at most 10 times a second"""
@@ -155,13 +160,14 @@ class EDMOManual:
     
     async def parseInputFile(self, instructions):
         async with self.connected:
-            print("waiting for active sessions 165 EDMOManual.py")
+            print("waiting for active sessions in parseInputFile EDMOManual.py")
             await self.connected.wait_for(lambda: bool(self.activeSessions))
         # instructions must be of type: 
         # c motor_id 'amp'/'off'/'freq'/'phb' float (ex: c 3 amp 13.5)
         # f path (ex: cleanData/2024.09.24/Kumoko/12.02.51)
         instruction = instructions.split(" ", 1)
         data = None
+        self.noInput = False
         match (instruction[0]):
             case "c":
                 print(f'Sending instruction: {instruction[1]}')
@@ -181,6 +187,7 @@ class EDMOManual:
                         nbInstructions[filename[12]] = (len(data[filename[12]]) - 1)
                 if not data:    
                     print("No Input_Player in this folder ==> ending the run")
+                    self.noInput = True
                     
                 loop = asyncio.get_event_loop()
                 tasks = []
@@ -224,13 +231,17 @@ class EDMOManual:
             while not self.closed: 
                 await self.update()
                 if self.dataPath and replayFile.done():
-                    self.closed = True
+                    await self.close()
         except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
             await self.onShutdown()
             pass
-        await self.close()
+        
         
     async def close(self):
+        if len(self.activeSessions) == 0:
+            async with self.connected:
+                print("waiting for active sessions in close EDMOManual.py")
+                await self.connected.wait_for(lambda: bool(self.activeSessions))
         self.closed = True
         for s in [sess for sess in self.activeSessions]:
             session = self.activeSessions[s]
@@ -238,13 +249,14 @@ class EDMOManual:
         
         self.GoProOff()
         time.sleep(2)
-        self.logVideoFile()
+        if self.initialized and not self.noInput:
+            self.logVideoFile()
             
 
     async def onShutdown(self, app: None = None):
         print("Cleaning up")
         """Shuts down existing connections gracefully to prevent a minor deadlock when shutting down the server"""
-        self.close()
+        await self.close()
 
         self.fusedCommunication.close()
         await asyncio.sleep(3)

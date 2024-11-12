@@ -39,14 +39,14 @@ def cancel_all_tasks(exclude_current=False):
         task.cancel()
         
 
-async def experiment_replay(startFilePath: str=None):
+async def experiment_replay(startFilePath: str=None, edmo_list:list[str]=[]):
     skip = True if startFilePath else False    
-    # wifi_com = WifiCommunication("GoPro 6665")
-    # await wifi_com.initialize()
+    wifi_com = WifiCommunication("GoPro 6665", "GoPro/GoPro 6665")
+    await wifi_com.initialize()
     server = EDMOManual()
     asyncio.get_event_loop().create_task(server.run())
     await asyncio.sleep(1)
-    server.closed = True
+    await server.close()
     await asyncio.sleep(5)
 
     cwd = os.getcwd()
@@ -55,7 +55,7 @@ async def experiment_replay(startFilePath: str=None):
         edmo_dir = date_dir + '\\' + date_folder 
         for edmo_folder in os.listdir(edmo_dir):
             time_dir = edmo_dir + '\\' + edmo_folder
-            if edmo_folder != 'Kumoko' and edmo_folder != 'Lamarr':
+            if edmo_folder not in edmo_list:
                 continue
             for time_folder in os.listdir(time_dir):
                 data_path = time_dir + '\\' + time_folder
@@ -90,14 +90,18 @@ def experiment_explore():
     return
 
 
-def main(startFilePath: str=None):
+def main(startFilePath: str=None, edmos:str=None):
     if startFilePath:
         startFilePath.replace('/', '\\')
-    asyncio.run(experiment_replay(startFilePath),debug= True)
+    
+    edmo_list = edmos.split(" ")    
+        
+    asyncio.run(experiment_replay(startFilePath, edmo_list),debug= True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--path", type=str, help='Path to the data file you want to start from', default=None)
+    parser.add_argument("-edmos", type=str, help="list of the edmo files you allow to replay", default="Kumoko Lamarr")
     args = parser.parse_args()
-    main(args.path)
+    main(args.path, args.edmos)

@@ -22,7 +22,7 @@ class SessionLogger:
         pass
 
     def write(self, channel: str, message: str):
-        if self.blockWrite and (channel != 'IMU_replay' or channel != 'Session'):
+        if self.blockWrite and not (channel == 'IMU_replay'):
             return
         if channel not in self.channels:
             self.channels[channel] = []

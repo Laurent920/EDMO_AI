@@ -1,8 +1,7 @@
 # wifi_enable.py/Open GoPro, Version 2.0 (C) Copyright 2021 GoPro, Inc. (http://gopro.com/OpenGoPro).
 # This copyright was auto-generated on Wed, Sep  1, 2021  5:06:01 PM
 
-from multiprocessing import Value
-import sys
+import json
 import asyncio
 import argparse
 from pathlib import Path
@@ -145,6 +144,8 @@ class WifiCommunication():
             return True
         else:
             raise ValueError("Unable to connect to the gopro's wifi")
+        
+        
     def send_command(self, command:str, savePath:str = None):
         if not self.initialized:
             # self.verify_wifi_connection()
@@ -154,7 +155,20 @@ class WifiCommunication():
         file = ''
         querystring = {}
         match command:
+            case 'camera control':
+                op = "/gopro/camera/control/set_ui_controller"          
+                querystring = {"p":"0"}
+            case 'get preset':
+                op = "/gopro/camera/presets/get"
+            case 'set video':
+                op = '/gopro/camera/presets/set_group?id=1000'
+            case 'set photo':
+                op = "/gopro/camera/presets/set_group?id=1001" 
+            case 'load preset':
+                op = "/gopro/camera/presets/load"
+                querystring = {"id":"6"}
             case 'keep alive':
+                # Good practice: send every 3 seconds
                 op = "/gopro/camera/keep_alive"
             case 'start':
                 op = "/gopro/camera/shutter/start"
@@ -162,6 +176,7 @@ class WifiCommunication():
                 op = "/gopro/camera/shutter/stop"
             case 'start stream':
                 op = "/gopro/camera/stream/start"
+                # View stream in VLC via Media -> Open Network Stream : udp://@:8554
             case 'stop stream':
                 op = "/gopro/camera/stream/stop"
             case 'get camera state':
@@ -197,7 +212,9 @@ class WifiCommunication():
         logger.info("Command sent successfully")
         
         logger.info(response)
-        if download_video:
+        if not download_video:
+            logger.info(logger.info(f"Response: {json.dumps(response.json(), indent=4)}"))
+        else:
             if not savePath:
                 logger.error("savePath argument is missing in send_command ==> saving in current directory...")
                 savePath = os.getcwd()
@@ -211,6 +228,7 @@ class WifiCommunication():
                         url = GOPRO_BASE_URL + f"/videos/DCIM/100GOPRO/{file}"
                         response = requests.get(url, timeout=10)            
                         logger.info(response)
+                        time.sleep(2)
                     if response.status_code == 200:
                         break
                     else:
@@ -251,10 +269,11 @@ if __name__ == "__main__":
         "--path",
         type=str,
         help="Path to the folder that contains ssid.txt (by default:  ./GoPro/GoPro XXXX/)",
-        default='GoPro/GoPro 6665/',
+        default=None,
     )
     args = parser.parse_args()
-
-    wifi_com = WifiCommunication(args.identifier, Path(args.path))
+    path = Path(args.path) if args.path else None
+    
+    wifi_com = WifiCommunication(args.identifier, path)
     
     asyncio.run(main(wifi_com))

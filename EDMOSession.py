@@ -34,7 +34,7 @@ class EDMOPlayer:
         rtcPeer.onConnectCallbacks.append(self.onConnect)
         rtcPeer.onDisconnectCallbacks.append(self.onDisconnect)
 
-    def onMessage(self, message: str):
+    def onMessage(self, message: str, reset: bool=False):
         self.session.sessionLog.write(f"Input_Player{self.number}", message=message)
         parts = message.split(" ")
         if(parts[0] == "vote"):
@@ -84,6 +84,13 @@ class EDMOPlayer:
     def json(self):
         return json.dumps(self.dict())
     
+    async def reset(self):
+        self.onMessage("amp 0", reset=True)
+        self.onMessage("freq 0", reset=True)
+        self.onMessage("off 90", reset=True)
+        self.onMessage("phb 0", reset=True)
+    
+    
 class EDMOOveridePlayer(EDMOPlayer):
     def __init__(self, rtcPeer: WebRTCPeer, id: int,  edmoSession: "EDMOSession"):
         super().__init__( rtcPeer, "Overrider" , edmoSession)
@@ -130,9 +137,9 @@ class EDMOManualPlayer(EDMOPlayer):
         
         self.voted =  False
 
-        
-    async def onMessage(self, message: str):
-        self.session.sessionLog.write(f"Input_Manual{self.number}", message=message)
+    async def onMessage(self, message: str, reset: bool=False):
+        if not reset:
+            self.session.sessionLog.write(f"Input_Manual{self.number}", message=message)
         
         parts = message.split(' ')
         if(parts[0] == "freq"):
@@ -141,11 +148,11 @@ class EDMOManualPlayer(EDMOPlayer):
         
         self.session.updateMotor(self.number, message)
     
-    def reset(self):
-        self.onMessage("amp 0")
-        self.onMessage("freq 0")
-        self.onMessage("off 90")
-        self.onMessage("phb 0")
+    async def reset(self):
+        await self.onMessage("amp 0", reset=True)
+        await self.onMessage("freq 0", reset=True)
+        await self.onMessage("off 90", reset=True)
+        await self.onMessage("phb 0", reset=True)    
         
     def assignNumber(self, number: int):
         self.number = number        
@@ -388,6 +395,8 @@ class EDMOSession:
         await self.sessionLog.flush()
         
         if self.manual:
+            for player in self.activePlayers:
+                await player.reset()
             self.protocol.onConnectionEstablished = None
             self.removeSelf(self)
             return

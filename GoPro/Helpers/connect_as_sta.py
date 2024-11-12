@@ -194,7 +194,7 @@ async def connect_to_network(
             if provisioning_notification.provisioning_state == proto.EnumProvisioning.PROVISIONING_SUCCESS_NEW_AP:
                 return
             if provisioning_notification.provisioning_state != proto.EnumProvisioning.PROVISIONING_STARTED:
-                return 
+                # return 
                 raise RuntimeError(f"Unexpected provisioning state: {provisioning_notification.provisioning_state}")
         else:
             raise RuntimeError("Only expect to receive Action ID 0x84, 0x85, or 0x0C responses after scan request")
