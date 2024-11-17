@@ -1,4 +1,5 @@
 import asyncio
+from dis import Instruction
 from EDMOSession import EDMOSession
 from FusedCommunication import FusedCommunication, FusedCommunicationProtocol
 import os
@@ -134,6 +135,7 @@ class EDMOManual:
                 
     async def runInputFile(self, id, data:list[str], nbInstructions):
         print(f"reading player {id} ...")  
+        print(data)
         for i in range(nbInstructions - 1):
             cur_split = data[i].split(': ')
             next_split = data[i+1].split(': ')
@@ -158,7 +160,7 @@ class EDMOManual:
         print(f"finished reading player {id}")
     
     
-    async def parseInputFile(self, instructions):
+    async def parseInputFile(self, instructions, explore:bool=False):
         async with self.connected:
             print("waiting for active sessions in parseInputFile EDMOManual.py")
             await self.connected.wait_for(lambda: bool(self.activeSessions))
@@ -181,7 +183,7 @@ class EDMOManual:
                 nbInstructions = {}
                 filepath = os.path.abspath(filepath)
                 for filename in os.listdir(filepath):
-                    pattern = r"^Input_Player[0-9]*\.log$"
+                    pattern = r"^Input_Manual[0-9]*\.log$" if explore else r"^Input_Player[0-9]*\.log$"
                     if re.match(pattern, filename):
                         data[filename[12]] = (open(os.path.join(filepath, filename), "r").read()).splitlines()
                         nbInstructions[filename[12]] = (len(data[filename[12]]) - 1)
@@ -221,9 +223,9 @@ class EDMOManual:
             await self.parseInputFile(instruction)      
         
         
-    async def run(self) -> None:
+    async def run(self, explore:bool=False) -> None:
         if self.dataPath:
-            replayFile = asyncio.get_event_loop().create_task(self.parseInputFile("f " + self.dataPath))
+            replayFile = asyncio.get_event_loop().create_task(self.parseInputFile("f " + self.dataPath, explore))
         if self.initialized:
             await self._notify()
         
@@ -248,7 +250,7 @@ class EDMOManual:
             await session.close()
         
         self.GoProOff()
-        time.sleep(2)
+        await asyncio.sleep(2)
         if self.initialized and not self.noInput:
             self.logVideoFile()
             

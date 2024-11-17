@@ -5,6 +5,7 @@ from heapq import heapify
 import heapq
 import itertools
 import json
+import os
 import struct
 from typing import TYPE_CHECKING, Callable, Self
 
@@ -204,7 +205,9 @@ class EDMOSession:
         sessionRemoval: Callable[[Self], None],
         dataPath: str = None
     ):
-        self.dataPath = dataPath
+        self.replay = False
+        if 'IMU.log' in os.listdir(dataPath):
+            self.replay = True
         self.manual = False
         self.sessionLog = SessionLogger(protocol.identifier, dataPath)
         self.removeSelf = sessionRemoval
@@ -452,7 +455,7 @@ class EDMOSession:
 
         final = f"{{{accelaration},{gyroscope},{magnetic},{gravity}, {rotation}}}"
 
-        if self.dataPath:
+        if self.replay:
             self.sessionLog.write("IMU_replay", final)
         else:
             self.sessionLog.write("IMU", final)

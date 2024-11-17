@@ -121,7 +121,7 @@ class WifiCommunication():
             response = subprocess.run(f'netsh wlan connect name="{self.ssid}"', capture_output=True, text=True, shell=True)
             if response.returncode != 0:
                 logger.info(f"Connection failed: {response.stderr}")
-                continue
+                time.sleep(5)
             
             # Confirm connection by checking the network status
             time.sleep(5)
@@ -228,7 +228,7 @@ class WifiCommunication():
                         url = GOPRO_BASE_URL + f"/videos/DCIM/100GOPRO/{file}"
                         response = requests.get(url, timeout=10)            
                         logger.info(response)
-                        time.sleep(2)
+                        time.sleep(3)
                     if response.status_code == 200:
                         break
                     else:
