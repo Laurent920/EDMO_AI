@@ -135,7 +135,6 @@ class EDMOManual:
                 
     async def runInputFile(self, id, data:list[str], nbInstructions):
         print(f"reading player {id} ...")  
-        print(data)
         for i in range(nbInstructions - 1):
             cur_split = data[i].split(': ')
             next_split = data[i+1].split(': ')
@@ -186,6 +185,7 @@ class EDMOManual:
                     pattern = r"^Input_Manual[0-9]*\.log$" if explore else r"^Input_Player[0-9]*\.log$"
                     if re.match(pattern, filename):
                         data[filename[12]] = (open(os.path.join(filepath, filename), "r").read()).splitlines()
+                        
                         nbInstructions[filename[12]] = (len(data[filename[12]]) - 1)
                 if not data:    
                     print("No Input_Player in this folder ==> ending the run")

@@ -9,14 +9,14 @@ class SessionLogger:
         self.channels = dict[str, list[str]]()
         self.sessionStartTime = datetime.now()
         self.lastFlushTime = self.sessionStartTime
+        self.blockWrite = False
         if dataPath:
-            self.blockWrite = True 
+            self.blockWrite = True
             path = self.directoryName = dataPath
             self.existingFiles = []
             for filename in os.listdir(path):
                 self.existingFiles.append(filename)
         else:
-            self.blockWrite = False
             path = self.directoryName = f"./SessionLogs/{self.sessionStartTime.strftime(f"%Y.%m.%d/{self.name}/%H.%M.%S")}"
 
         if not os.path.exists(path):
@@ -25,7 +25,7 @@ class SessionLogger:
         pass
 
     def write(self, channel: str, message: str):
-        if self.blockWrite and not (f'{channel}.log' in self.existingFiles):
+        if self.blockWrite and f'{channel}.log' in self.existingFiles:
             return
         if channel not in self.channels:
             self.channels[channel] = []

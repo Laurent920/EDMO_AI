@@ -50,8 +50,8 @@ def removeLogDuplicates(motorData):
         length = len(log)
         while i < length - 1:
             if log[i][0] == log[i + 1][0]:
-                print(f'log number :{j} has duplicates:')
-                print(f'{log[i][0]}{log[i + 1][0]}')
+                print(f'log number {j} has duplicates:')
+                print(f'{log[i][0]}  {log[i + 1][0]}')
                 del motorData[j][i+1]
                 length -= 1
                 continue
@@ -184,7 +184,7 @@ def writeToLog(motorData, timesToRemove, path):
     # plt.show()
 
 if __name__ == "__main__":
-    readMulti = True
+    readMulti = False
     readOneFile = not readMulti
 
     if readMulti:
@@ -216,7 +216,8 @@ if __name__ == "__main__":
     print("--- %s seconds ---" % (time.time() - start_time))
 
     if readOneFile:
-        path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'
+        # path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'
+        path = 'SessionLogs/2024.11.18/Athena/15.30.55'
         location = path
         motorData = readLog(location)
         removeLogDuplicates(motorData)
