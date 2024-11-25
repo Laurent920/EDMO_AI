@@ -148,27 +148,9 @@ def generate_exploration_files(nbPlayers: int = 2):
         print(f'Creating new folder {explorePath}')
         
     
-    freq, amp, off, phb = [], [], [], []
-    freq.append(1)
-    # for frequency in range(5, 20, 5):  
-    #     freq.append(frequency/10.0)
-    for amplitude in range(20, 90, 20):
-        amp.append(amplitude)
-    for offset in range(0, 180, 30):
-        off.append(offset)
-    for phase in range(0, 360, 40):
-        phb.append(phase)
-    
-    all_input:list
-    match nbPlayers:
-        case 2:
-            all_input = players2(amp, freq, off, phb)
-        case 4:
-            print("To be implemented")
-            return 
-        case _:
-            print(f"Parameters for {nbPlayers} players has to be implemented")
-            return
+    all_input:list = get_all_input(nbPlayers)
+    if not all_input:
+        return
         
     players_filename = [] 
     for i in range(nbPlayers):
@@ -197,7 +179,6 @@ def generate_exploration_files(nbPlayers: int = 2):
             continue
                     
         for j, filename in enumerate(players_filename):
-            # end_time = cur_time + episode_length - timedelta(seconds=1)
             file = f'{filepath}/{filename}'
             
             with open(file, 'a+') as log:
@@ -212,6 +193,30 @@ def generate_exploration_files(nbPlayers: int = 2):
                     log.writelines(f"{end_time}: off 90\n")
                     log.writelines(f"{end_time}: phb 0\n")
         cur_time += episode_length
+
+
+def get_all_input(nbPlayers: int = 2):
+    freq, amp, off, phb = [], [], [], []
+    freq.append(1)
+    # for frequency in range(5, 20, 5):  
+    #     freq.append(frequency/10.0)
+    for amplitude in range(20, 90, 20):
+        amp.append(amplitude)
+    for offset in range(0, 180, 30):
+        off.append(offset)
+    for phase in range(0, 360, 40):
+        phb.append(phase)
+    
+    match nbPlayers:
+        case 2:
+            return players2(amp, freq, off, phb)
+        case 4:
+            print("To be implemented")
+            return None
+        case _:
+            print(f"Parameters for {nbPlayers} players has to be implemented")
+            return None
+    
 
 
 def players2(amp, freq, off, phb):

@@ -13,9 +13,12 @@ from mpl_toolkits.mplot3d import Axes3D
 import plotly.graph_objects as go
 from matplotlib.animation import FuncAnimation
 from ArUCo_Markers_Pose import *
+from experiments import get_all_input
 
 
-def data_analysis(dir):
+def data_analysis(dir, nbPlayers: int = 2):
+    all_input = get_all_input(nbPlayers)
+    
     for folder in os.listdir(dir):
         filepath = f'{dir}/{folder}'
         files = os.listdir(filepath)
@@ -26,6 +29,7 @@ def data_analysis(dir):
         pose_d = pose_data.Pose_data(filepath)
         pose_d.get_pose()
         
+        exp_start, exp_end = folder.split('-', 2)
         for file in files:
             pass
             # retrieve experiment values from experiments.py
@@ -38,12 +42,9 @@ def data_analysis(dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--path", type=str, help='Path to the data file you want to start from', default=None)
-    parser.add_argument("--replay", action="store_const", help="List of the edmo files you allow to replay (default: Kumoko Lamarr)", const="Kumoko Lamarr")
-    parser.add_argument("--generate", action="store_const", help="Number of legs of the EDMO for which you want to generate the parameters (default: 2)", const=2)
-    parser.add_argument("--explore", action="store_const", help="Type of EDMO you want to explore (default: Snake)", const="Snake")
+    parser.add_argument("-p", "--path", type=str, help='Path to exploreData/"EDMO" (default: exploreData/Snake)', default="exploreData/Snake")
     args = parser.parse_args()
-
     
     nb_legs =  args.generate 
 
+    data_analysis(args.path)
