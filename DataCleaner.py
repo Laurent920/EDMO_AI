@@ -46,19 +46,23 @@ def readLog(location):
 
 def removeLogDuplicates(motorData):
     for j, log in enumerate(motorData):  # Search for duplicates
+        print(f'nb logs before removable: {len(log)}')
         i = 0
         length = len(log)
         while i < length - 1:
             if log[i][0] == log[i + 1][0]:
-                print(f'log number {j} has duplicates:')
-                print(f'{log[i][0]}  {log[i + 1][0]}')
+                # print(f'log number {j} has duplicates:')
+                # print(f'{log[i][0]}  {log[i + 1][0]}')
                 del motorData[j][i+1]
                 length -= 1
                 continue
             i += 1
+        print(f'nb logs after duplicate removable: {len(log)}')
 
 
 def cleanLog(motorData):
+    if len(motorData) <= 0:
+        return
     shortestLog = min(len(log) for log in motorData)
 
     timeLog = []
@@ -133,6 +137,7 @@ def writeToLog(motorData, timesToRemove, path):
             break
     cleanPath = path[slashPos:]
     cleanPath = './cleanData' + cleanPath
+    print(f'clean path: {cleanPath}')
     if not os.path.exists(cleanPath):
         os.makedirs(cleanPath)
         print(f'Creating new folder {cleanPath}')
@@ -146,10 +151,21 @@ def writeToLog(motorData, timesToRemove, path):
         with open(f"{cleanPath}/{filename}", "w") as newFile:
             count = 0
             if not re.match(pattern, filename):
+                # Video
+                if os.path.splitext(filename)[1].lower() == '.mp4':
+                    # ignore video
+                    continue
+                    # Copy video
+                    video_path = f'{cleanPath}/{filename}'
+                    if not os.path.exists(video_path):
+                        os.replace(f'{path}/{filename}', video_path)
+                    continue
+                # Copy files that don't need to be cleaned
                 with open(f'{path}/{filename}', 'r') as src:
                     for line in src:
                         newFile.write(line)
             elif filename == 'IMU.log':
+                # Write clean IMU log 
                 f = open(os.path.join(location, filename), "r").read()
                 logs = f.split('\n')[:-1]
                 for i, row in enumerate(motorData[0]):
@@ -162,6 +178,7 @@ def writeToLog(motorData, timesToRemove, path):
                         count += 1
                 print(f'Row deleted for IMU log: {count}, final size: {len(motorData[0])-count}')
             else:
+                # Write clean motor logs
                 newFile.write('Time, Frequency, Amplitude, Offset, PhaseShift, Phase\n')
                 for row in motorData[index]:
                     if row[0] not in timesToRemove and not nearTimeToRemove(row[0], timesToRemove):
@@ -192,20 +209,23 @@ if __name__ == "__main__":
         path = './SessionLogs/'
         # path = './DataSmallEDMO/2024.09.07/'
         # path = './DataCorosectPC/2024.09.24/'
-        readFile = False
+        path = './'
+        readFile = True
 
         for folder in os.listdir(path):  # Read folders of folders
             print(folder)
+            if folder != 'exploreData':
+                continue 
             for edmo_folder in os.listdir(path + folder):
                 print(edmo_folder)
                 newPath = path + folder + '/' + edmo_folder + '/'
                 for filename in os.listdir(newPath):
-                    if folder == f'2024.10.17': # Restrict read to one folder
+                    if folder == f'2024.11.20': # Restrict read to one folder
                         readFile = True
 
                     if readFile:
-                        print(filename)
                         location = newPath + filename
+                        print(f'location: {location}')
                         motorData = readLog(location)
                         timesToRemove = cleanLog(motorData)
                         removeLogDuplicates(motorData)
@@ -217,11 +237,12 @@ if __name__ == "__main__":
 
     if readOneFile:
         # path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'
-        path = 'SessionLogs/2024.11.18/Athena/15.30.55'
+        path = './SessionLogs/2024.11.18/Athena/15.30.55'
+        path = './exploreData/Snake/2700-2879' 
         location = path
         motorData = readLog(location)
         removeLogDuplicates(motorData)
         timesToRemove = cleanLog(motorData)
-        writeToLog(motorData, timesToRemove, path)
+        writeToLog(motorData, timesToRemove, location)
 
 # Refaire 2024.09.19/Cadence/10.13.50

@@ -13,6 +13,14 @@ import argparse
 import math
 from GoPro.wifi.WifiCommunication import WifiCommunication
 
+
+init_time = timedelta(microseconds=1)
+cur_time = init_time
+episode_length = timedelta(seconds=10) # How long do we want to run each parameter change
+session_length = 180 # How many parameter change do we run in one session
+end_time = session_length*episode_length + timedelta(microseconds=1)
+
+
 def creation_date(path_to_file):
     """
     Try to get the date that a file was created, falling back to when it was
@@ -156,12 +164,6 @@ def generate_exploration_files(nbPlayers: int = 2):
     for i in range(nbPlayers):
         players_filename.append(f"Input_Manual{i}.log")
 
-        
-    init_time = timedelta(microseconds=1)
-    cur_time = init_time
-    episode_length = timedelta(seconds=10) # How long do we want to run each parameter change
-    session_length = 180 # How many parameter change do we run in one session
-    end_time = session_length*episode_length + timedelta(microseconds=1)
     filepath:str
     skip = False
     for i, instructions in enumerate(all_input):
@@ -185,7 +187,7 @@ def generate_exploration_files(nbPlayers: int = 2):
                 log.writelines(f"{cur_time}: freq {instructions[0]}\n")          
                 log.writelines(f"{cur_time}: amp {instructions[1][j]}\n")
                 log.writelines(f"{cur_time}: off {instructions[2][j]}\n")
-                log.writelines(f"{cur_time}: phb {instructions[3][j]*(math.pi/180)}\n")
+                log.writelines(f"{cur_time}: phb {instructions[3][j]}\n")
                 
                 if end_time - cur_time < episode_length + timedelta(seconds=1):
                     log.writelines(f"{end_time}: freq 0\n")          
@@ -228,7 +230,7 @@ def players2(amp, freq, off, phb):
         for amps in all_amp:
             for offs in all_off:
                 for phases in all_phase:
-                    all_input.append((f, amps, offs, phases))
+                    all_input.append((f, amps, offs, [phase*(math.pi/180) for phase in phases]))
     return all_input
                                                       
 def get_all_amp(amp):

@@ -263,7 +263,7 @@ if __name__ == "__main__":
         "identifier",
         type=str,
         help="Last 4 digits of GoPro serial number, which is the last 4 digits of the default \
-            camera SSID.",
+            camera SSID. (ex: GoPro 6665)",
     )
     parser.add_argument(
         "--path",
