@@ -87,7 +87,7 @@ def data_analysis(dir, nbPlayers: int = 2):
             json.dump(exp_edmo_poses, f)
             
         # print(len(motor_ranges))
-        print(exp_edmo_poses.keys())
+        # print(exp_edmo_poses.keys())
         exp_edmo_movement = {}
         for exp_nb, positions in exp_edmo_poses.items():
             '''
@@ -128,11 +128,54 @@ def data_analysis(dir, nbPlayers: int = 2):
             exp_edmo_movement[exp_nb] =[x_mov, y_mov,\
                                         x_speed, y_speed, z_speed, speed,\
                                         abs_x_speed/nb_frames, abs_y_speed/nb_frames, abs_z_speed/nb_frames, abs_speed/nb_frames]
-            # print(exp_edmo_movement[exp_nb])
-                
+            # f = open(f"{filepath}/speed_data.log", "w")
+            # json.dump(exp_edmo_movement, f)
+        plot_parameter_space(all_input, exp_edmo_movement)        
                 
             
+def plot_parameter_space(all_input, exp_edmo_movement): 
+    amp1, amp2, off1, off2, phb_diff, speeds = [], [], [], [], [], []
+    for frame, speed in exp_edmo_movement.items():
+        inputs = all_input[frame] # (freq, (amp0, amp1), (off0, off1), (phb0, phb1))
+        amp1.append(inputs[1][0])
+        amp2.append(inputs[1][1])
+        off1.append(inputs[2][0])
+        off2.append(inputs[2][1])
+        phb_diff.append(abs(inputs[3][0]-inputs[3][1]))
+        speeds.append(speed[-1])
+        # print(inputs)
+        # print(speeds)
+        # return
+    
+    
+    fig = plt.figure(figsize=(12, 7))  # Adjust the figure size for better spacing
 
+    # Left subplot
+    ax1 = fig.add_subplot(121, projection='3d')  # 1 row, 2 columns, 1st plot
+    for i in range(len(off1)):
+        ax1.scatter(off1[i], off2[i], phb_diff[i], s=speeds[i]*3000, c=amp1[i], marker='o', cmap='viridis', alpha=0.8)
+    ax1.set_xlabel('Offset motor 1')
+    ax1.set_ylabel('Offset motor 2')
+    ax1.set_zlabel('Phase difference')
+    ax1.set_title('Graph 1')
+    cbar1 = plt.colorbar(ax1.collections[0], ax=ax1, pad=0.1)
+    cbar1.set_label('Speed')
+
+    # Right subplot
+    ax2 = fig.add_subplot(122, projection='3d')  # 1 row, 2 columns, 2nd plot
+    for i in range(len(off1)):
+        ax2.scatter(off1[i], off2[i], phb_diff[i], s=speeds[i]*3000, c=amp2[i], marker='o', cmap='viridis', alpha=0.8)
+    ax2.set_xlabel('Offset motor 1')
+    ax2.set_ylabel('Offset motor 2')
+    ax2.set_zlabel('Phase difference')
+    ax2.set_title('Graph 2')
+    cbar2 = plt.colorbar(ax2.collections[0], ax=ax2, pad=0.1)
+    cbar2.set_label('Speed')
+
+    # Show the plot
+    plt.tight_layout()  # Adjust layout to prevent overlap
+    plt.show()
+        
 
 def toDatetime(time):
     t = datetime.strptime(time,"%H:%M:%S.%f")
@@ -191,5 +234,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
      
     path = args.path
+    path = 'exploreData/Snake/'
     path = 'cleanData/Snake/'
     data_analysis(path)

@@ -201,7 +201,7 @@ def writeToLog(motorData, timesToRemove, path):
     # plt.show()
 
 if __name__ == "__main__":
-    readMulti = False
+    readMulti = True
     readOneFile = not readMulti
 
     if readMulti:
