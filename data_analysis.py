@@ -16,10 +16,12 @@ from matplotlib.animation import FuncAnimation
 from ArUCo_Markers_Pose import *
 from experiments import get_all_input
 from datetime import datetime, timedelta
-
+import seaborn as sns
+import pandas as pd
+import plotly.express as px
 
 fps = 30
-
+plot_data = None
 def data_analysis(dir, nbPlayers: int = 2):
     '''
     - Extract the aruco positions from the video
@@ -54,7 +56,7 @@ def data_analysis(dir, nbPlayers: int = 2):
         edmo_rots = pose_d.edmo_rots
                 
         # Matching the motor data with the input data and matching it with the corresponding frames
-        print('Matching the edmo\'s movement with the input data')
+        print('Matching the edmo\'s movement with the input data...')
         motor0 = open(f"{filepath}/Motor0.log", 'r').readlines()
         motor1 = open(f"{filepath}/Motor1.log", 'r').readlines()
 
@@ -86,6 +88,7 @@ def data_analysis(dir, nbPlayers: int = 2):
         with open(f'{filepath}/edmo_pose.log', 'w') as f:
             json.dump(exp_edmo_poses, f)
             
+        plot_2D_poses(exp_edmo_poses)
         # print(len(motor_ranges))
         # print(exp_edmo_poses.keys())
         exp_edmo_movement = {}
@@ -130,10 +133,12 @@ def data_analysis(dir, nbPlayers: int = 2):
                                         abs_x_speed/nb_frames, abs_y_speed/nb_frames, abs_z_speed/nb_frames, abs_speed/nb_frames]
             # f = open(f"{filepath}/speed_data.log", "w")
             # json.dump(exp_edmo_movement, f)
-        plot_parameter_space(all_input, exp_edmo_movement)        
-                
+        merge_parameter_data(all_input, exp_edmo_movement)        
+    parallel_coord(plot_data)
+
             
-def plot_parameter_space(all_input, exp_edmo_movement): 
+def merge_parameter_data(all_input, exp_edmo_movement): 
+    global plot_data
     amp1, amp2, off1, off2, phb_diff, speeds = [], [], [], [], [], []
     for frame, speed in exp_edmo_movement.items():
         inputs = all_input[frame] # (freq, (amp0, amp1), (off0, off1), (phb0, phb1))
@@ -148,34 +153,94 @@ def plot_parameter_space(all_input, exp_edmo_movement):
         # return
     
     
-    fig = plt.figure(figsize=(12, 7))  # Adjust the figure size for better spacing
+    data = pd.DataFrame({
+        'Offset_motor_1': off1,
+        'Offset_motor_2': off2,
+        'Amp_motor_1': amp1,
+        'Amp_motor_2': amp2,
+        'Phase_difference': phb_diff,
+        'Speed' : speeds
+    })
+    
+    plot_data = pd.concat([plot_data, data], ignore_index=True) if plot_data is not None else data  
+    
+    def double_3D_plot(plot_data):
+        off1 = plot_data['Offset_motor_1']
+        off2 = plot_data['Offset_motor_2']
+        amp1 = plot_data['Amp_motor_1']
+        amp2 = plot_data['Amp_motor_2']
+        phb_diff = plot_data['Phase_difference']
+        speeds = plot_data['Speed']
+        
+        fig = plt.figure(figsize=(12, 7))  # Adjust the figure size for better spacing
 
-    # Left subplot
-    ax1 = fig.add_subplot(121, projection='3d')  # 1 row, 2 columns, 1st plot
-    for i in range(len(off1)):
-        ax1.scatter(off1[i], off2[i], phb_diff[i], s=speeds[i]*3000, c=amp1[i], marker='o', cmap='viridis', alpha=0.8)
-    ax1.set_xlabel('Offset motor 1')
-    ax1.set_ylabel('Offset motor 2')
-    ax1.set_zlabel('Phase difference')
-    ax1.set_title('Graph 1')
-    cbar1 = plt.colorbar(ax1.collections[0], ax=ax1, pad=0.1)
-    cbar1.set_label('Speed')
+        # Left subplot
+        ax1 = fig.add_subplot(121, projection='3d')  # 1 row, 2 columns, 1st plot
+        for i in range(len(off1)):
+            ax1.scatter(off1[i], off2[i], phb_diff[i], s=speeds[i]*3000, c=amp1[i], marker='o', cmap='viridis', alpha=0.8)
+        ax1.set_xlabel('Offset motor 1')
+        ax1.set_ylabel('Offset motor 2')
+        ax1.set_zlabel('Phase difference')
+        ax1.set_title('Graph 1')
+        cbar1 = plt.colorbar(ax1.collections[0], ax=ax1, pad=0.1)
+        cbar1.set_label('Speed')
 
-    # Right subplot
-    ax2 = fig.add_subplot(122, projection='3d')  # 1 row, 2 columns, 2nd plot
-    for i in range(len(off1)):
-        ax2.scatter(off1[i], off2[i], phb_diff[i], s=speeds[i]*3000, c=amp2[i], marker='o', cmap='viridis', alpha=0.8)
-    ax2.set_xlabel('Offset motor 1')
-    ax2.set_ylabel('Offset motor 2')
-    ax2.set_zlabel('Phase difference')
-    ax2.set_title('Graph 2')
-    cbar2 = plt.colorbar(ax2.collections[0], ax=ax2, pad=0.1)
-    cbar2.set_label('Speed')
+        # Right subplot
+        ax2 = fig.add_subplot(122, projection='3d')  # 1 row, 2 columns, 2nd plot
+        for i in range(len(off1)):
+            ax2.scatter(off1[i], off2[i], phb_diff[i], s=speeds[i]*3000, c=amp2[i], marker='o', cmap='viridis', alpha=0.8)
+        ax2.set_xlabel('Offset motor 1')
+        ax2.set_ylabel('Offset motor 2')
+        ax2.set_zlabel('Phase difference')
+        ax2.set_title('Graph 2')
+        cbar2 = plt.colorbar(ax2.collections[0], ax=ax2, pad=0.1)
+        cbar2.set_label('Speed')
+
+        # Show the plot
+        plt.tight_layout()  # Adjust layout to prevent overlap
+        plt.show()
+        
+        
+def parallel_coord(plot_data):
+    # Create a parallel coordinates plot
+    fig = px.parallel_coordinates(
+        plot_data,
+        dimensions=['Offset_motor_1', 'Offset_motor_2', 'Amp_motor_1', 'Amp_motor_2', 'Phase_difference'],
+        color='Speed',
+        color_continuous_scale='Viridis',  # Color scale for speed
+        labels={'Speed': 'Speed (avg absolute speed)'}
+    )
+
+    fig.update_layout(
+        width=900,
+        height=600
+    )
+
+    fig.show()
+
+def plot_2D_poses(exp_edmo_poses):
+    sorted_positions = [exp_edmo_poses[key] for key in sorted(exp_edmo_poses.keys())]
+
+    # Flatten the list of positions to maintain the time order
+    all_positions = [pos for positions in sorted_positions for pos in positions]
+
+    # Extract x, y coordinates for plotting
+    x = [pos[0] for pos in all_positions]
+    y = [pos[1] for pos in all_positions]
+
+    # Plot the trajectory
+    plt.figure(figsize=(8, 6))
+    plt.plot(x, y, marker='o', linestyle='-', color='b', label='Trajectory')
+
+    # Customize the plot
+    plt.title("2D Trajectory Over Time", fontsize=14)
+    plt.xlabel("X Position", fontsize=12)
+    plt.ylabel("Y Position", fontsize=12)
+    plt.grid(True)
+    plt.legend()
 
     # Show the plot
-    plt.tight_layout()  # Adjust layout to prevent overlap
     plt.show()
-        
 
 def toDatetime(time):
     t = datetime.strptime(time,"%H:%M:%S.%f")
