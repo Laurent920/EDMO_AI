@@ -199,17 +199,9 @@ def writeToLog(motorData, timesToRemove, path):
     # plt.grid(True)
     # plt.tight_layout()
     # plt.show()
-
-if __name__ == "__main__":
-    readMulti = True
-    readOneFile = not readMulti
-
+    
+def clean(path, readMulti):
     if readMulti:
-        # path = './DataBloom/2024.09.16/'
-        path = './SessionLogs/'
-        # path = './DataSmallEDMO/2024.09.07/'
-        # path = './DataCorosectPC/2024.09.24/'
-        path = './'
         readFile = True
 
         for folder in os.listdir(path):  # Read folders of folders
@@ -233,16 +225,29 @@ if __name__ == "__main__":
                         print('__________________')
                     else:
                         print('skipping')
-    print("--- %s seconds ---" % (time.time() - start_time))
-
-    if readOneFile:
-        # path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'
-        path = './SessionLogs/2024.11.18/Athena/15.30.55'
-        path = './exploreData/Snake/2700-2879' 
+    else:
         location = path
         motorData = readLog(location)
         removeLogDuplicates(motorData)
         timesToRemove = cleanLog(motorData)
         writeToLog(motorData, timesToRemove, location)
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+
+if __name__ == "__main__":
+    readMulti = True
+
+    if readMulti:
+        # path = './DataBloom/2024.09.16/'
+        path = './SessionLogs/'
+        # path = './DataSmallEDMO/2024.09.07/'
+        # path = './DataCorosectPC/2024.09.24/'
+        path = './'
+        clean(path, readMulti=readMulti)
+    else:
+        # path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'
+        path = './SessionLogs/2024.11.18/Athena/15.30.55'
+        path = './exploreData/Snake/2700-2879' 
+        clean(path, readMulti=readMulti)
 
 # Refaire 2024.09.19/Cadence/10.13.50

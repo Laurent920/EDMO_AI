@@ -176,7 +176,7 @@ class WifiCommunication():
                 op = "/gopro/camera/shutter/stop"
             case 'start stream':
                 op = "/gopro/camera/stream/start"
-                # View stream in VLC via Media -> Open Network Stream : udp://@:8554
+                print('View stream in VLC via Media -> Open Network Stream : udp://@:8554')
             case 'stop stream':
                 op = "/gopro/camera/stream/stop"
             case 'get camera state':
@@ -197,6 +197,10 @@ class WifiCommunication():
                 download_video = True
             case 'hilight':    
                 op = "/gopro/media/hilight/moment"
+            case 'help':
+                # TODO 
+                print('options details need to be added')
+                return
             case _:
                 print('wrong command')
                 return
@@ -268,7 +272,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--path",
         type=str,
-        help="Path to the folder that contains ssid.txt (by default:  ./GoPro/GoPro XXXX/)",
+        help="Path to the folder that contains ssid.txt (ex:  ./GoPro/GoPro XXXX/)",
         default=None,
     )
     args = parser.parse_args()

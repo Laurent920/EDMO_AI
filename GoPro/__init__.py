@@ -1,4 +1,3 @@
-
 # __init__.py/Open GoPro, Version 2.0 (C) Copyright 2021 GoPro, Inc. (http://gopro.com/OpenGoPro).
 # This copyright was auto-generated on Wed Jan  5 23:22:12 UTC 2022
 
@@ -39,4 +38,3 @@ import GoPro.proto
 from GoPro.Helpers.decipher_response import ResponseManager
 from GoPro.Helpers.connect_as_sta import connect_to_access_point
 
-# from Helpers import GoProUuid
