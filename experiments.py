@@ -1,6 +1,5 @@
 import asyncio
-from csv import Error
-from datetime import time, timedelta
+from datetime import timedelta
 
 from requests import session
 
@@ -8,132 +7,18 @@ from EDMOManual import EDMOManual
 import os
 import platform
 from pathlib import Path
-from colorama import Fore, Style, init
+from colorama import Fore, Style
 import argparse
 import math
 from GoPro.wifi.WifiCommunication import WifiCommunication
 
+# region EXPLORATION FILES GENERATION
 
 init_time = timedelta(microseconds=1)
 cur_time = init_time
 episode_length = timedelta(seconds=10) # How long do we want to run each parameter change
 session_length = 180 # How many parameter change do we run in one session
 end_time = session_length*episode_length + timedelta(microseconds=1)
-
-
-def creation_date(path_to_file):
-    """
-    Try to get the date that a file was created, falling back to when it was
-    last modified if that isn't possible.
-    See http://stackoverflow.com/a/39501288/1709587 for explanation.
-    """
-    if platform.system() == 'Windows':
-        return os.path.getctime(path_to_file)
-    else:
-        stat = os.stat(path_to_file)
-        try:
-            return stat.st_birthtime
-        except AttributeError:
-            # We're probably on Linux. No easy way to get creation dates here,
-            # so we'll settle for when its content was last modified.
-            return stat.st_mtime
-        
-
-async def experiment_setup():        
-    wifi_com = WifiCommunication("GoPro 6665", Path("GoPro/GoPro 6665"))
-    await wifi_com.initialize()
-    server = EDMOManual()
-    asyncio.get_event_loop().create_task(server.run())
-    await asyncio.sleep(1)
-    await server.close()
-    await asyncio.sleep(5)
-    return server
-
-async def experiment_replay(startFilePath: str=None, edmo_list:list[str]=[]):
-    skip = True if startFilePath else False    
-    
-    server = await experiment_setup()    
-
-    cwd = os.getcwd()
-    date_dir = cwd + '\\cleanData'
-    for date_folder in os.listdir(date_dir):
-        edmo_dir = date_dir + '\\' + date_folder 
-        for edmo_folder in os.listdir(edmo_dir):
-            time_dir = edmo_dir + '\\' + edmo_folder
-            if edmo_folder not in edmo_list:
-                continue
-            for time_folder in os.listdir(time_dir):
-                data_path = time_dir + '\\' + time_folder
-                if skip:
-                    if startFilePath not in data_path:
-                        print(f'Skipping: {data_path}')
-                        continue
-                    else:
-                        skip = False
-                    
-                if await wait_for_input(server, data_path):
-                    return
-                    
-                    
-async def experiment_explore(startFilePath:str =None, edmo_type:str =None):
-    skip = True if startFilePath else False    
-    
-    server = await experiment_setup()
-
-    cwd = os.getcwd()
-    edmo_dir = cwd + '\\exploreData'
-    for edmo in os.listdir(edmo_dir):
-        experiment_dir = edmo_dir + '\\' + edmo
-        if edmo != edmo_type:
-            continue
-        for experiment_folder in os.listdir(experiment_dir):
-            data_path = experiment_dir + '\\' + experiment_folder
-            if skip:
-                if startFilePath not in data_path:
-                    print(f'Skipping: {experiment_folder}')
-                    continue
-                else:
-                    skip = False
-            if await wait_for_input(server, data_path, True):
-                return
-            # else:
-            #     while True:
-            #         rerun_input = input("Type rerun or quit: ")
-            #         match rerun_input:
-            #             case 'rerun':
-            #                 await wait_for_input(server, data_path, True)
-            #             case 'quit':
-            #                 return
-            #             case _:
-                            # pass
-                        
-
-
-async def wait_for_input(server: EDMOManual, data_path:str, explore:bool=False):
-    try:
-        cont = True
-        while cont:
-            human_in = input(Fore.BLUE + f"""To play data from {Path(*data_path.split('\\')[-3:])} press y\nTo skip this folder press s : """)
-            match human_in:
-                case 'y':        
-                    print(Style.RESET_ALL + f"Running {Path(*data_path.split('\\')[-3:])}...")
-                    print("press ctrl c to stop the run if you have to move it")
-                    await server.initialize(data_path)
-                    await server.run(explore)
-                    print("Finished running")
-                    cont = False
-                case 's':
-                    cont = False
-                case 'quit':
-                    print(Style.RESET_ALL) 
-                    return True
-                case _:
-                    pass
-        return False
-    except Exception as e:
-        print(e)
-        print("run stopping...")
-        return False
 
 def generate_exploration_files(nbPlayers: int = 2):
     explorePath = './exploreData'
@@ -263,6 +148,96 @@ def get_all_phase(phb):
                 phase_diff.append(phb_diff)
                 all_phb.append((phase1, phase2))
     return all_phb
+
+
+# region REPLAY AND EXPLORATION        
+
+async def experiment_setup():        
+    wifi_com = WifiCommunication("GoPro 6665", Path("GoPro/GoPro 6665"))
+    await wifi_com.initialize()
+    server = EDMOManual()
+    asyncio.get_event_loop().create_task(server.run())
+    await asyncio.sleep(1)
+    await server.close()
+    await asyncio.sleep(5)
+    return server
+
+
+async def wait_for_input(server: EDMOManual, data_path:str, explore:bool=False):
+    try:
+        cont = True
+        while cont:
+            human_in = input(Fore.BLUE + f"""To play data from {Path(*data_path.split('\\')[-3:])} press y\nTo skip this folder press s : """)
+            match human_in:
+                case 'y':        
+                    print(Style.RESET_ALL + f"Running {Path(*data_path.split('\\')[-3:])}...")
+                    print("press ctrl c to stop the run if you have to move it")
+                    await server.initialize(data_path)
+                    await server.run(explore)
+                    print("Finished running")
+                    cont = False
+                case 's':
+                    cont = False
+                case 'quit':
+                    print(Style.RESET_ALL) 
+                    return True
+                case _:
+                    pass
+        return False
+    except Exception as e:
+        print(e)
+        print("run stopping...")
+        return False
+
+
+async def experiment_replay(startFilePath: str=None, edmo_list:list[str]=[]):
+    skip = True if startFilePath else False    
+    
+    server = await experiment_setup()    
+
+    cwd = os.getcwd()
+    date_dir = cwd + '\\cleanData'
+    for date_folder in os.listdir(date_dir):
+        edmo_dir = date_dir + '\\' + date_folder 
+        for edmo_folder in os.listdir(edmo_dir):
+            time_dir = edmo_dir + '\\' + edmo_folder
+            if edmo_folder not in edmo_list:
+                continue
+            for time_folder in os.listdir(time_dir):
+                data_path = time_dir + '\\' + time_folder
+                if skip:
+                    if startFilePath not in data_path:
+                        print(f'Skipping: {data_path}')
+                        continue
+                    else:
+                        skip = False
+                    
+                if await wait_for_input(server, data_path):
+                    return
+                    
+                    
+async def experiment_explore(startFilePath:str =None, edmo_type:str =None):
+    skip = True if startFilePath else False    
+    
+    server = await experiment_setup()
+
+    cwd = os.getcwd()
+    edmo_dir = cwd + '\\exploreData'
+    for edmo in os.listdir(edmo_dir):
+        experiment_dir = edmo_dir + '\\' + edmo
+        if edmo != edmo_type:
+            continue
+        for experiment_folder in os.listdir(experiment_dir):
+            data_path = experiment_dir + '\\' + experiment_folder
+            if skip:
+                if startFilePath not in data_path:
+                    print(f'Skipping: {experiment_folder}')
+                    continue
+                else:
+                    skip = False
+            if await wait_for_input(server, data_path, True):
+                return
+                    
 
 def main_replay(startFilePath: str=None, edmos:str=None):
     if startFilePath:

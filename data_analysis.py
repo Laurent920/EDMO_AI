@@ -20,6 +20,14 @@ import seaborn as sns
 import pandas as pd
 import plotly.express as px
 import heapq
+import dash
+from dash import dcc, html, Input, Output
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+import plotly.colors as pc
+import math
+
 
 
 fps = 30
@@ -455,14 +463,253 @@ def interactive_plot(self, time=False):
     fig.write_html("interactive_plot.html")
     
 
+def parallel_3d_plot(data: dict[str, int|float], speed_type:str):
+    plot_data = pd.DataFrame(data)
+    plot_data['Index'] = plot_data.index
+    min_speed = plot_data[speed_type].min()
+    max_speed = plot_data[speed_type].max()
 
+    # Normalize data for the plot
+    parameters = [
+        'Amp_motor_1',
+        'Amp_motor_2',
+        'Offset_motor_1',
+        'Offset_motor_2',
+        'Phase_difference'
+    ]
+
+    # Normalize data for consistent plotting
+    norm_data = plot_data.copy()
+    for dim in parameters:
+        match dim:
+            case 'Amp_motor_1' | 'Amp_motor_2':
+                norm_data[dim] = plot_data[dim] / 90
+            case 'Offset_motor_1' | 'Offset_motor_2':
+                norm_data[dim] = plot_data[dim] / 180
+            case 'Phase_difference':
+                norm_data[dim] = plot_data[dim] / 360
+            case speed_type:
+                norm_data[dim] = plot_data[dim] 
+                
+    norm_data[speed_type] = norm_data[speed_type].fillna(np.nan).infer_objects(copy=False)
+
+    # Initialize the Dash app
+    app = dash.Dash(__name__)
+    # app = JupyterDash(__name__)
+
+
+    # Define filter ranges for each dimension
+    filter_param = {
+        'Amp_motor_1': [0, 90],
+        'Amp_motor_2': [0, 90],
+        'Offset_motor_1': [0, 180],
+        'Offset_motor_2': [0, 180],
+        'Phase_difference': [0, 360],
+        speed_type: [0, max_speed]  
+    }
+
+    # Layout of the app
+    app.layout = html.Div([
+    html.H1("Interactive 3D Parallel Coordinates Plot", style={'textAlign': 'center'}),
+    dcc.Graph(id='parallel-3d-plot'),
+    
+    # Save button
+    html.Button("Save Plot as HTML", id='save-button', n_clicks=0),
+    
+    # Message area
+    html.Div(id='save-message', style={'padding': '10px'}),
+    
+    html.Div(
+        [
+            html.Div([ 
+                html.Label(f"Filter {param}:"),
+                dcc.RangeSlider(
+                    id=f'{param}-filter',
+                    min=value_range[0],
+                    max=math.ceil(value_range[1]),
+                    step=1 if dim != speed_type else 0.1,
+                    marks={value_range[0]: f'{value_range[0]}', 
+                           (math.ceil(value_range[1]) + value_range[0]) / 2: f'{(value_range[0] + math.ceil(value_range[1])) / 2}', 
+                           int(value_range[1]): f'{math.ceil(value_range[1])}'},
+                    value=[value_range[0], math.ceil(value_range[1])]
+                ),
+                html.Div(id=f'{param}-value', style={'padding-left': '10px'})
+            ]) for param, value_range in filter_param.items()
+        ],  
+        style={'display': 'flex', 'flexDirection': 'column', 'gap': '20px'}
+    )
+    ])
+
+
+    # Callback to update the 3D plot based on filter ranges
+    @app.callback(
+        Output('parallel-3d-plot', 'figure'),
+        [Input(f'{param}-filter', 'value') for param in filter_param]
+    )
+    def update_plot(*filters):
+        # Apply filters to the normalized data
+        filtered_data = norm_data.copy()
+        print(filters)
+        for i, (dim, filter_range) in enumerate(filter_param.items()):
+            min_val, max_val = filters[i]
+            if dim == speed_type:
+                filtered_data = filtered_data[
+                    (filtered_data[dim] >= (min_val)) & 
+                    (filtered_data[dim] <= (max_val))
+                ]
+            else:
+                filtered_data = filtered_data[
+                    (filtered_data[dim] >= (min_val / (filter_range[1] - filter_range[0]))) & 
+                    (filtered_data[dim] <= (max_val / (filter_range[1] - filter_range[0])))
+                ]
+
+        # Generate 3D lines for the plot
+        lines = []
+        for _, row in filtered_data.iterrows():
+            x_dims = list(range(len(parameters)))  # parameters (0, 1, 2, ...)
+            y_time = [int(row["Index"])] * len(parameters)  # Same time for a single data point
+            z_values = row[parameters].values  # Normalized values of the parameters
+
+            # Prepare the hover text showing original values and index
+            hover_text = f"Index: {int(row['Index'])}<br>" + f"Speed: {row[speed_type]:.2f}<br>" + "<br>".join(
+                [f"{dim}: {plot_data[dim].iloc[int(row['Index'])]:.2f}" for dim in parameters]
+            )
+
+            color = 'black'
+            if not pd.isna(row[speed_type]):
+                color = pc.sample_colorscale('jet', [row[speed_type]/(max_speed)])[0]  # Get the color from the jet scale
+
+            # Add each line as a separate trace
+            lines.append(go.Scatter3d(
+                x=x_dims,
+                y=y_time,
+                z=z_values,
+                mode='lines',
+                line=dict(
+                    color=color,  # Color by 'Speed'
+                    colorscale='jet',
+                    cmin=min_speed,  # Minimum of the speed type
+                    cmax=max_speed,  # Maximum of the speed type
+                    colorbar=dict(
+                    title=speed_type,  # Title for the color bar
+                    thickness=15,  # Thickness of the color bar
+                    len=1,  # Length of the color bar as a fraction of plot height
+                    x=0.92,  # Position of the color bar (move it to the right)
+                ),
+                    width=2
+                ),
+                marker=dict(size=2),
+                text=hover_text,  # Add the hover text here
+                hoverinfo='text',  # Show only the text when hovering
+                name=f"Index {int(row['Index'])}"  # Set the trace name as the index
+            ))
+
+
+        # Update layout
+        fig = go.Figure(data=lines)
+        fig.update_layout(
+            scene=dict(
+                xaxis=dict(
+                    title="Parameters",
+                    tickvals=list(range(len(parameters))),
+                    ticktext=parameters,
+                    range=[-1, len(parameters)]
+                ),
+                yaxis=dict(title="Time", range=[-1, len(plot_data['Index'])]),
+                zaxis=dict(title="Normalized Values", range=[-0.1, 1.1]),
+            ),
+            width=1300,
+            height=800
+        )
+
+        return fig
+
+    @app.callback(
+        Output('save-message', 'children'),
+        [Input('save-button', 'n_clicks')],
+        [Input('parallel-3d-plot', 'figure')]
+    )
+    def save_plot(n_clicks, figure):
+        if n_clicks > 0:
+            # Save the figure as an HTML file
+            fig = go.Figure(figure)
+            fig.write_html("plot.html")  # Save as HTML
+            return "Plot saved as 'plot.html'"
+        return ""
+    
+    # Callback to update the current value display for sliders
+    @app.callback(
+        [Output(f'{dim}-value', 'children') for dim in filter_param],
+        [Input(f'{dim}-filter', 'value') for dim in filter_param]
+    )
+    def update_slider_value(*values):
+        return [f"Current value: {value[0]} to {value[1]}" for value in values]
+
+    app.run_server(debug=True, use_reloader=False)
+    # http://127.0.0.1:8050/
+        
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--path", type=str, help='Path to exploreData/"EDMO" (default: exploreData/Snake)', default="exploreData/Snake")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("-p", "--path", type=str, help='Path to exploreData/"EDMO" (default: exploreData/Snake)', default="exploreData/Snake")
+    # args = parser.parse_args()
      
-    path = args.path
-    path = 'exploreData/Snake/'
-    path = 'cleanData/Snake/'
-    plot_data = data_analysis(path)
-    parallel_coord(plot_data)
+    # path = args.path
+    # path = 'exploreData/Snake/'
+    # path = 'cleanData/Snake/'
+    # plot_data = data_analysis(path)
+    # parallel_coord(plot_data)
+    
+    
+    # Generate synthetic data
+    # data = {
+    #     'Amp_motor_1': np.random.uniform(0, 90, 100),
+    #     'Amp_motor_2': np.random.uniform(0, 90, 100),
+    #     'Offset_motor_1': np.random.uniform(0, 180, 100),
+    #     'Offset_motor_2': np.random.uniform(0, 180, 100),
+    #     'Phase_difference': np.random.uniform(0, 360, 100),
+    #     'Speed': np.random.uniform(0, 100, 100)
+    # }
+    # parallel_3d_plot(data, "Speed")
+
+    # explore = False
+    # dir = './cleanData/'
+    # snakes = ['Cadence', 'Kiwi', 'Maribel', 'Ramirez', 'Snake', 'Snake1', 'Snake2']
+    # for folder in os.listdir(dir):  # Read folders of folders
+    #     print(folder)
+    #     for edmo_folder in os.listdir(f'{path}/{folder}'):
+    #         if edmo_folder not in snakes:
+    #             continue
+    #         newPath = f'{path}/{folder}/{edmo_folder}/'
+    #         for time_folder in os.listdir(newPath):    
+    #             filepath = newPath + time_folder
+
+    #             data = {}
+    #             nbInstructions = {}
+    #             for filename in os.listdir(filepath):
+    #                 pattern = r"^Input_Manual[0-9]*\.log$" if explore else r"^Input_Player[0-9]*\.log$"
+    #                 if re.match(pattern, filename):
+    #                     data[filename[12]] = (open(os.path.join(filepath, filename), "r").read()).splitlines()
+    #                 nbInstructions[filename[12]] = (len(data[filename[12]]) - 1)
+                
+    #             for key in data.keys():
+    #                 task = runInputFile(key, data[key], nbInstructions[key])
+    #             for i in range(nbInstructions - 1):
+    #                 cur_split = data[i].split(': ')
+    #                 next_split = data[i+1].split(': ')
+                    
+    #                 c = datetime.strptime(cur_split[0],"%H:%M:%S.%f")
+    #                 n = datetime.strptime(next_split[0],"%H:%M:%S.%f")
+    #                 cur_timedelta = timedelta(hours=c.hour, minutes=c.minute, seconds=c.second)
+    with open('cleanData/Snake/plot data.log', 'r') as f:
+        data = json.load(f)
+
+    # Convert to DataFrame
+    plot_data = pd.DataFrame.from_records(data)
+
+    print(plot_data)
+    speed_type = ['x speed', 'y speed', 'z speed', 'xyz speed',  'xy speed', \
+                'x abs speed', 'y abs speed', 'z abs speed', 'xyz abs speed', 'xy abs speed']
+    parallel_3d_plot(plot_data[:40], speed_type[4])
+    
+    
+    

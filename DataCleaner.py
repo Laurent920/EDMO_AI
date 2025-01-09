@@ -46,9 +46,9 @@ def readLog(location):
 
 def removeLogDuplicates(motorData):
     for j, log in enumerate(motorData):  # Search for duplicates
-        print(f'nb logs before removable: {len(log)}')
         i = 0
         length = len(log)
+        originalSize = length
         while i < length - 1:
             if log[i][0] == log[i + 1][0]:
                 # print(f'log number {j} has duplicates:')
@@ -57,7 +57,9 @@ def removeLogDuplicates(motorData):
                 length -= 1
                 continue
             i += 1
-        print(f'nb logs after duplicate removable: {len(log)}')
+        newSize = len(log)
+        if newSize < originalSize:
+            print(f'nb logs duplicates removed: {originalSize - newSize}')
 
 
 def cleanLog(motorData):
@@ -147,7 +149,7 @@ def writeToLog(motorData, timesToRemove, path):
     deletedRows = np.empty(5, dtype=object)
     for i in range(5):
         deletedRows[i] = []
-    for filename in os.listdir(location):
+    for filename in os.listdir(path):
         with open(f"{cleanPath}/{filename}", "w") as newFile:
             count = 0
             if not re.match(pattern, filename):
@@ -166,7 +168,7 @@ def writeToLog(motorData, timesToRemove, path):
                         newFile.write(line)
             elif filename == 'IMU.log':
                 # Write clean IMU log 
-                f = open(os.path.join(location, filename), "r").read()
+                f = open(os.path.join(path, filename), "r").read()
                 logs = f.split('\n')[:-1]
                 for i, row in enumerate(motorData[0]):
                     if row[0] not in timesToRemove and not nearTimeToRemove(row[0], timesToRemove):
@@ -200,21 +202,18 @@ def writeToLog(motorData, timesToRemove, path):
     # plt.tight_layout()
     # plt.show()
     
-def clean(path, readMulti):
+def clean(path, readMulti, folderName=None):
     if readMulti:
         readFile = True
 
         for folder in os.listdir(path):  # Read folders of folders
-            print(folder)
-            if folder != 'exploreData':
+            if folderName is not None and folder != folderName: # Restrict to a single folder eg. "2025.01.07"
                 continue 
-            for edmo_folder in os.listdir(path + folder):
+            print(folder)
+            for edmo_folder in os.listdir(f'{path}/{folder}'):
                 print(edmo_folder)
-                newPath = path + folder + '/' + edmo_folder + '/'
+                newPath = f'{path}/{folder}/{edmo_folder}/'
                 for filename in os.listdir(newPath):
-                    if folder == f'2024.11.20': # Restrict read to one folder
-                        readFile = True
-
                     if readFile:
                         location = newPath + filename
                         print(f'location: {location}')
@@ -238,14 +237,9 @@ if __name__ == "__main__":
     readMulti = True
 
     if readMulti:
-        # path = './DataBloom/2024.09.16/'
         path = './SessionLogs/'
-        # path = './DataSmallEDMO/2024.09.07/'
-        # path = './DataCorosectPC/2024.09.24/'
-        path = './'
-        clean(path, readMulti=readMulti)
+        clean(path, readMulti, '2025.01.07')
     else:
-        # path = './DataCorosectPC/2024.09.24/Kumoko/09.10.09'
         path = './SessionLogs/2024.11.18/Athena/15.30.55'
         path = './exploreData/Snake/2700-2879' 
         clean(path, readMulti=readMulti)
