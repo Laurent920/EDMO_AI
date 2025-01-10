@@ -150,7 +150,7 @@ def get_all_phase(phb):
     return all_phb
 
 
-# region REPLAY AND EXPLORATION        
+# region SETUP AND RUN        
 
 async def experiment_setup():        
     wifi_com = WifiCommunication("GoPro 6665", Path("GoPro/GoPro 6665"))
@@ -163,7 +163,7 @@ async def experiment_setup():
     return server
 
 
-async def wait_for_input(server: EDMOManual, data_path:str, explore:bool=False):
+async def run_experiment(server: EDMOManual, data_path:str, explore:bool=False):
     try:
         cont = True
         while cont:
@@ -190,7 +190,8 @@ async def wait_for_input(server: EDMOManual, data_path:str, explore:bool=False):
         return False
 
 
-async def experiment_replay(startFilePath: str=None, edmo_list:list[str]=[]):
+# region REPLAY
+async def replay(startFilePath: str=None, edmo_list:list[str]=[]):
     skip = True if startFilePath else False    
     
     server = await experiment_setup()    
@@ -212,11 +213,11 @@ async def experiment_replay(startFilePath: str=None, edmo_list:list[str]=[]):
                     else:
                         skip = False
                     
-                if await wait_for_input(server, data_path):
+                if await run_experiment(server, data_path):
                     return
                     
-                    
-async def experiment_explore(startFilePath:str =None, edmo_type:str =None):
+# region EXPLORE
+async def explore(startFilePath:str =None, edmo_type:str =None):
     skip = True if startFilePath else False    
     
     server = await experiment_setup()
@@ -235,17 +236,9 @@ async def experiment_explore(startFilePath:str =None, edmo_type:str =None):
                     continue
                 else:
                     skip = False
-            if await wait_for_input(server, data_path, True):
+            if await run_experiment(server, data_path, True):
                 return
-                    
 
-def main_replay(startFilePath: str=None, edmos:str=None):
-    if startFilePath:
-        startFilePath.replace('/', '\\')
-    
-    edmo_list = edmos.split(" ")    
-        
-    asyncio.run(experiment_replay(startFilePath, edmo_list))
 
 
 if __name__ == "__main__":
@@ -260,7 +253,7 @@ if __name__ == "__main__":
     nb_legs =  args.generate 
     edmo_files = args.replay
     edmo_type= args.explore
-    
+    startFilePath = args.path
     # nb_legs =  None
     # edmo_files = None
     # edmo_type= "Snake"
@@ -268,9 +261,12 @@ if __name__ == "__main__":
     if nb_legs:
         generate_exploration_files(nb_legs)
     elif edmo_files:
-        main_replay(args.path, edmo_files)
+        if startFilePath:
+            startFilePath.replace('/', '\\')
+        edmo_list = edmo_files.split(" ")    
+        asyncio.run(replay(startFilePath, edmo_list))
     elif edmo_type:
-        asyncio.run(experiment_explore(args.path, edmo_type))
+        asyncio.run(explore(args.path, edmo_type))
     else:
         print("Decide what you want to do by setting either flags -replay, -generate or -explore (only one flag can be set at a time)")
         exit(0) 
