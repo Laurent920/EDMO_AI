@@ -106,6 +106,8 @@ async def connect_ble(notification_handler: noti_handler_T, identifier: str | No
             return client
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error(f"Connection establishment failed: {exc}")
+            if 'pythoncom' in str(exc):
+                logger.error("Importing seaborn package have caused this error before")
             logger.warning(f"Retrying #{retry}")
 
     raise RuntimeError(f"Couldn't establish BLE connection after {RETRIES} retries")

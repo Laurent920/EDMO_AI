@@ -1,19 +1,15 @@
 import asyncio
 from datetime import timedelta
-
-from requests import session
-
 from EDMOManual import EDMOManual
 import os
-import platform
 from pathlib import Path
 from colorama import Fore, Style
 import argparse
 import math
 from GoPro.wifi.WifiCommunication import WifiCommunication
 
-# region EXPLORATION FILES GENERATION
 
+# region EXPLORATION FILES GENERATION
 init_time = timedelta(microseconds=1)
 cur_time = init_time
 episode_length = timedelta(seconds=10) # How long do we want to run each parameter change
@@ -198,6 +194,7 @@ async def replay(startFilePath: str=None, edmo_list:list[str]=[]):
 
     cwd = os.getcwd()
     date_dir = cwd + '\\cleanData'
+    print(f"Searching for {edmo_list} files in ./cleanData ....")
     for date_folder in os.listdir(date_dir):
         edmo_dir = date_dir + '\\' + date_folder 
         for edmo_folder in os.listdir(edmo_dir):
@@ -209,7 +206,7 @@ async def replay(startFilePath: str=None, edmo_list:list[str]=[]):
                 if skip:
                     if startFilePath not in data_path:
                         print(f'Skipping: {data_path}')
-                        continue
+                        continue 
                     else:
                         skip = False
                     
@@ -224,6 +221,7 @@ async def explore(startFilePath:str =None, edmo_type:str =None):
 
     cwd = os.getcwd()
     edmo_dir = cwd + '\\exploreData'
+    print("Searching for exploration files in ./exploreData .....")
     for edmo in os.listdir(edmo_dir):
         experiment_dir = edmo_dir + '\\' + edmo
         if edmo != edmo_type:
@@ -240,16 +238,14 @@ async def explore(startFilePath:str =None, edmo_type:str =None):
                 return
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--path", type=str, help='Path to the data file you want to start from', default=None)
-    parser.add_argument("--replay", action="store_const", help="List of the edmo files you allow to replay (default: Kumoko Lamarr)", const="Kumoko Lamarr")
-    parser.add_argument("--generate", action="store_const", help="Number of legs of the EDMO for which you want to generate the parameters (default: 2)", const=2)
-    parser.add_argument("--explore", action="store_const", help="Type of EDMO you want to explore (default: Snake)", const="Snake")
+    parser.add_argument("--replay", nargs="?", help="List of the edmo files you allow to replay (default: Kumoko Lamarr)", const="Kumoko Lamarr")
+    parser.add_argument("--generate", nargs="?", help="Number of legs of the EDMO for which you want to generate the parameters (default: 2)", const=2)
+    parser.add_argument("--explore", nargs="?", help="Type of EDMO you want to explore (default: Snake)", const="Snake")
     args = parser.parse_args()
 
-    
     nb_legs =  args.generate 
     edmo_files = args.replay
     edmo_type= args.explore

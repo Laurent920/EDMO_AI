@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from GoPro.COHN.communicate_via_cohn import COHNCommunication
 from GoPro.wifi.WifiCommunication import WifiCommunication
+import numpy as np
 
 
 class EDMOManual:
@@ -35,7 +36,7 @@ class EDMOManual:
          # GoPro 
         folderPath = "./GoPro/"
         for folderName in os.listdir(folderPath):
-            pattern = r"GoPro 6665" #\d{4}"
+            pattern = r"GoPro 6665" #\d{4}" # Change to \d{4} to have every gopro id in possession
             if re.match(pattern, folderName):
                 print(f"Getting credentials from : {folderPath}{folderName}/\t in EDMOManual init")
                 self.goPros[folderName] = WifiCommunication(folderName,
@@ -45,6 +46,8 @@ class EDMOManual:
 
     
     async def initialize(self, dataPath:str = None):
+        # The class needs to be initialized in order to use it again after the session has been closed
+        # DO NOT CALL THIS IF YOU ONLY NEED TO USE ONE SESSION
         self.closed = False
         self.initialized = True
         
@@ -60,15 +63,12 @@ class EDMOManual:
         identifier = protocol.identifier
         self.activeEDMOs[identifier] = protocol
         
-        print("Edmo " + identifier + " connected") 
         self.activeSessions[identifier] = EDMOSession(
             protocol, 4, self.removeSession, self.dataPath
         )
-        
-        # TODO test how much delay we get between session and gopro
-        for gopro_id in self.goPros:
-            print(f"Sending start command to gopro in edmoConnected {gopro_id}")
-            self.goPros[gopro_id].send_command('start')
+        print("Edmo " + identifier + " connected")
+
+        self.GoProOn()
         
         for i in range(4):
             self.activeSessions[identifier].registerManualPlayer()
@@ -87,53 +87,53 @@ class EDMOManual:
         print("Edmo " + identifier + " disconnected") 
         if identifier in self.activeEDMOs:
             del self.activeEDMOs[identifier]
-            
-            
+    
+# region GoPro MANAGEMENT
+    def GoProOn(self):
+        print("Sending gopro start")
+        for gopro_id in self.goPros:
+            print(f"Sending start command to GoPro {gopro_id}")
+            self.goPros[gopro_id].send_command('start')
+    
     def GoProOff(self):
         for gopro_id in self.goPros:
             self.goPros[gopro_id].send_command('stop')
             
-            
-    def logVideoFile(self):
+    def logVideoFile(self, dataPath: None):
+        filenames = []
         for gopro_id in self.goPros:
-            self.goPros[gopro_id].send_command('get last video', self.dataPath)
-            
-            
-    def removeSession(self, session: EDMOSession):
-        identifier = session.protocol.identifier
-        if identifier in self.activeSessions:
-            del self.activeSessions[identifier]
-            
-            
-    async def update(self, instruction=None):
-        """Standard update loop to be performed at most 10 times a second"""
-        # Update the serial stuff
-        serialUpdateTask = asyncio.create_task(self.fusedCommunication.update())
-
-        # Update all sessions
-        sessionUpdates = []
-
-        for sessionID in self.activeSessions:
-            session = self.activeSessions[sessionID]
-            sessionUpdates.append(asyncio.create_task(session.update()))
-
-        # Ensure that the update cycle runs at most 10 times a second
-        minUpdateDuration = asyncio.create_task(asyncio.sleep(0.1))
-
-        await serialUpdateTask
-        if len(sessionUpdates) > 0:
-            await asyncio.wait(sessionUpdates)
-        await minUpdateDuration
+            file = self.goPros[gopro_id].send_command('get last video', dataPath)
+            filenames.append(file)
+        return filenames
     
+    async def GoProStopAndSave(self, savePath:str = None):
+        self.GoProOff()
+        await asyncio.sleep(2)
+        if savePath is None:
+            # Get the datapath from the Logger of the first edmoSession
+            savePath = self.activeSessions[list(self.activeSessions.keys())[0]].sessionLog.directoryName
+        return self.logVideoFile(savePath) 
     
-    def reset(self):
-        for sessionID in self.activeSessions:
-            session = self.activeSessions[sessionID] 
-            for player in session.activePlayers:
-                player.reset()
-                
-                
+# region INPUT MANAGEMENT
+    async def runInputDict(self,parameters:dict[int, dict[str, int]]): # parameters ex: {0: {'freq': 0, 'amp': 0, 'off': 90, 'phb': 0}, 1: {'freq': 0, 'amp': 0, 'off': 90, 'phb': 0}}
+        async with self.connected:
+            print("waiting for active sessions in runInputDict EDMOManual.py")
+            await self.connected.wait_for(lambda: bool(self.activeSessions))
+        for i, params  in parameters.items():
+            for msg, value in params.items():
+                if msg == 'phb':
+                    value = value / 180 * np.pi 
+                    if value > 2*np.pi or value < 0:
+                        print(f"Warning the value given to runInputDict must be in degrees between [0, 360], you obtained {value} radians (ignore this warning if it's intended)")
+                for sessionID in self.activeSessions:
+                    session = self.activeSessions[sessionID]
+                    await session.activePlayers[i].onMessage(f"{msg} {value}")
+          
+          
     async def runInputFile(self, id, data:list[str], nbInstructions):
+        async with self.connected:
+            print("waiting for active sessions in parseInputFile EDMOManual.py")
+            await self.connected.wait_for(lambda: bool(self.activeSessions))
         print(f"reading player {id} ...")  
         for i in range(nbInstructions - 1):
             cur_split = data[i].split(': ')
@@ -221,13 +221,49 @@ class EDMOManual:
             instruction = instructions[0]
                 
             await self.parseInputFile(instruction)      
-        
-        
+
+# region SESSION MANAGEMENT
+    def removeSession(self, session: EDMOSession):
+        identifier = session.protocol.identifier
+        if identifier in self.activeSessions:
+            del self.activeSessions[identifier]
+            
+            
+    async def update(self, instruction=None):
+        """Standard update loop to be performed at most 10 times a second"""
+        # Update the serial stuff
+        serialUpdateTask = asyncio.create_task(self.fusedCommunication.update())
+
+        # Update all sessions
+        sessionUpdates = []
+
+        for sessionID in self.activeSessions:
+            session = self.activeSessions[sessionID]
+            sessionUpdates.append(asyncio.create_task(session.update()))
+
+        # Ensure that the update cycle runs at most 10 times a second
+        minUpdateDuration = asyncio.create_task(asyncio.sleep(0.1))
+
+        await serialUpdateTask
+        if len(sessionUpdates) > 0:
+            await asyncio.wait(sessionUpdates)
+        await minUpdateDuration
+    
+     
+    async def reset(self):
+        for sessionID in self.activeSessions:
+            session = self.activeSessions[sessionID] 
+            for player in session.activePlayers:
+                await player.reset()
+                
+    
     async def run(self, explore:bool=False) -> None:
         if self.dataPath:
             replayFile = asyncio.get_event_loop().create_task(self.parseInputFile("f " + self.dataPath, explore))
-        if self.initialized:
-            await self._notify()
+        
+        # async with self.connected:
+        #     print("waiting for active sessions in run EDMOManual.py")
+        #     await self.connected.wait_for(lambda: bool(self.activeSessions))
         
         try:
             while not self.closed: 
@@ -252,7 +288,7 @@ class EDMOManual:
         self.GoProOff()
         await asyncio.sleep(2)
         if self.initialized and not self.noInput:
-            self.logVideoFile()
+            self.logVideoFile(self.dataPath)
             
 
     async def onShutdown(self, app: None = None):
@@ -266,7 +302,6 @@ class EDMOManual:
     
 async def main():
     server = EDMOManual()
-    server.initialize()
     asyncio.get_event_loop().create_task(server.manualInput())
     await server.run()
 

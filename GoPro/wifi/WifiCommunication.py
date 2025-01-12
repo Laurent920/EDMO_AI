@@ -239,10 +239,11 @@ class WifiCommunication():
                         print(f"Error response code, failed to retrieve the video retrying... {i+1}/3")
             except:
                 pass
-            savePath = Path(savePath) / Path(file)
+            savePath = os.path.join(savePath, file)
             logger.info(f"Saving video {file} at {savePath}")
             open(savePath, 'wb').write(response.content)
-
+            return savePath
+        return None
 
 async def main(wifi_com: WifiCommunication):
     await wifi_com.initialize()
