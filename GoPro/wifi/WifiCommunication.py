@@ -17,7 +17,7 @@ from bleak.backends.characteristic import BleakGATTCharacteristic
 
 from GoPro import logger, GOPRO_BASE_URL, connect_ble, GoProUuid
 
-
+debug = True
 class WifiCommunication():
     def __init__(self, gopro_id: str, folder:Path = None) -> None:
         pattern = r"GoPro \d{4}"
@@ -154,6 +154,7 @@ class WifiCommunication():
         download_video = False
         file = ''
         querystring = {}
+        location = []
         match command:
             case 'camera control':
                 op = "/gopro/camera/control/set_ui_controller"          
@@ -177,10 +178,14 @@ class WifiCommunication():
             case 'start stream':
                 op = "/gopro/camera/stream/start"
                 print('View stream in VLC via Media -> Open Network Stream : udp://@:8554')
+                # if it doesn't work follow this link : https://superuser.com/questions/889007/vlc-udp-network-stream-does-not-work-in-windows-but-does-in-linux
             case 'stop stream':
                 op = "/gopro/camera/stream/stop"
             case 'get camera state':
                 op = "/gopro/camera/state"
+            case 'get camera battery':
+                op = "/gopro/camera/state"
+                location.append(('status', 2))
             case 'get cohn state':
                 op = "/gopro/cohn/status"
             case 'get media list':
@@ -213,11 +218,17 @@ class WifiCommunication():
         response = requests.get(url, timeout=10, params=querystring)
         # Check for errors (if an error is found, an exception will be raised)
         response.raise_for_status()
-        logger.info("Command sent successfully")
-        
-        logger.info(response)
+        if debug:
+            logger.info("Command sent successfully")
+            logger.info(response)
         if not download_video:
-            logger.info(logger.info(f"Response: {json.dumps(response.json(), indent=4)}"))
+            if debug:
+                logger.info(logger.info(f"Response: {json.dumps(response.json(), indent=4)}"))
+            if len(location) > 0:
+                rsp = response.json()
+                battery = rsp[location[0][0]][location[0][1]]
+                print(f"Battery level: {battery}")
+                return battery
         else:
             if not savePath:
                 logger.error("savePath argument is missing in send_command ==> saving in current directory...")
@@ -225,18 +236,25 @@ class WifiCommunication():
             
             try:
                 rsp = response.json()
-                logger.info(rsp)
+                if debug:
+                    logger.info(rsp)
                 for i in range(3):
+                    print(rsp['file'])
                     if 'file' in rsp.keys():
                         file = rsp['file']
                         url = GOPRO_BASE_URL + f"/videos/DCIM/100GOPRO/{file}"
                         response = requests.get(url, timeout=10)            
-                        logger.info(response)
+                        if debug:
+                            logger.info(response)
                         time.sleep(3)
                     if response.status_code == 200:
                         break
                     else:
+                        if i == 2:
+                            logger.error("Unable to save the video, returning None")
+                            return None
                         print(f"Error response code, failed to retrieve the video retrying... {i+1}/3")
+                
             except:
                 pass
             savePath = os.path.join(savePath, file)

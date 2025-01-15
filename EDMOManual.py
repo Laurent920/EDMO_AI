@@ -15,7 +15,7 @@ import numpy as np
 
 
 class EDMOManual:
-    def __init__(self):
+    def __init__(self, gopro_list=[]):
         self.activeEDMOs: dict[str, FusedCommunicationProtocol] = {}
         self.activeSessions: dict[str, EDMOSession] = {}
         self.goPros: dict[str, WifiCommunication] = {}
@@ -36,11 +36,11 @@ class EDMOManual:
          # GoPro 
         folderPath = "./GoPro/"
         for folderName in os.listdir(folderPath):
-            pattern = r"GoPro 6665" #\d{4}" # Change to \d{4} to have every gopro id in possession
-            if re.match(pattern, folderName):
-                print(f"Getting credentials from : {folderPath}{folderName}/\t in EDMOManual init")
-                self.goPros[folderName] = WifiCommunication(folderName,
-                    Path(f"{folderPath}{folderName}/"))
+            for gopro_name in gopro_list: # Format: ["GoPro XXXX"]
+                if folderName == gopro_name:
+                    print(f"Getting credentials from : {folderPath}{folderName}/\t in EDMOManual init")
+                    self.goPros[folderName] = WifiCommunication(folderName,
+                        Path(f"{folderPath}{folderName}/"))
                 
         asyncio.get_event_loop().create_task(self.fusedCommunication.initialize())
 
@@ -55,6 +55,8 @@ class EDMOManual:
         self.dataPath = dataPath
             
         self.onEDMOConnected(self.protocol)
+        
+        
     # region EDMO MANAGEMENT
 
     def onEDMOConnected(self, protocol: FusedCommunicationProtocol):
@@ -90,7 +92,6 @@ class EDMOManual:
     
 # region GoPro MANAGEMENT
     def GoProOn(self):
-        print("Sending gopro start")
         for gopro_id in self.goPros:
             print(f"Sending start command to GoPro {gopro_id}")
             self.goPros[gopro_id].send_command('start')
@@ -107,13 +108,32 @@ class EDMOManual:
         return filenames
     
     async def GoProStopAndSave(self, savePath:str = None):
-        self.GoProOff()
-        await asyncio.sleep(2)
-        if savePath is None:
-            # Get the datapath from the Logger of the first edmoSession
-            savePath = self.activeSessions[list(self.activeSessions.keys())[0]].sessionLog.directoryName
-        return self.logVideoFile(savePath) 
-    
+        path = None
+        for i in range(3):
+            self.GoProOff()
+            self.GoProKeepAlive()
+            await self.reset()
+            await asyncio.sleep(3)
+            if savePath is None:
+                # Get the datapath from the Logger of the first edmoSession
+                savePath = self.activeSessions[list(self.activeSessions.keys())[0]].sessionLog.directoryName
+            path = self.logVideoFile(savePath) 
+            self.GoProKeepAlive()
+            print(i, path)
+            if path is not None:
+                return path
+        print("out of the loop for no reason")    
+        
+    def GoProKeepAlive(self):
+        for gopro_id in self.goPros:
+            self.goPros[gopro_id].send_command('keep alive')
+
+    def GoProBattery(self):
+        battery = []
+        for gopro_id in self.goPros:
+            battery.append(self.goPros[gopro_id].send_command('get camera battery'))
+        return battery            
+
 # region INPUT MANAGEMENT
     async def runInputDict(self,parameters:dict[int, dict[str, int]]): # parameters ex: {0: {'freq': 0, 'amp': 0, 'off': 90, 'phb': 0}, 1: {'freq': 0, 'amp': 0, 'off': 90, 'phb': 0}}
         async with self.connected:
@@ -270,7 +290,8 @@ class EDMOManual:
                 await self.update()
                 if self.dataPath and replayFile.done():
                     await self.close()
-        except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
+        except (asyncio.exceptions.CancelledError, KeyboardInterrupt) as e:
+            print(e)
             await self.onShutdown()
             pass
         
@@ -292,7 +313,7 @@ class EDMOManual:
             
 
     async def onShutdown(self, app: None = None):
-        print("Cleaning up")
+        print("Cleaning up, onShutDown")
         """Shuts down existing connections gracefully to prevent a minor deadlock when shutting down the server"""
         await self.close()
 

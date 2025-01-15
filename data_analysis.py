@@ -194,8 +194,8 @@ def merge_parameter_data(all_input, exp_edmo_movement):
     amp1, amp2, off1, off2, phb_diff, speeds = [], [], [], [], [], {}
     for i in range(11): 
         speeds[i] = []
-    for frame, speed in exp_edmo_movement.items():
-        inputs = all_input[frame] # (freq, (amp0, amp1), (off0, off1), (phb0, phb1))
+    for exp_nb, speed in exp_edmo_movement.items():
+        inputs = all_input[exp_nb] # (freq, (amp0, amp1), (off0, off1), (phb0, phb1))
         amp1.append(inputs[1][0])
         amp2.append(inputs[1][1])
         off1.append(inputs[2][0])
