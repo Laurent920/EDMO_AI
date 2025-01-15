@@ -20,7 +20,7 @@ from GoPro.wifi.WifiCommunication import WifiCommunication
 
 debug = True
 
-gopro = ["GoPro 4448"]
+gopro = ["GoPro 6665"]
 nb_legs = 2
 freq_value = 1.0
 param_ranges = {
@@ -119,8 +119,8 @@ async def get_EDMO_speed(server, parameters):
 ftol = 1e-4
 async def Powell(nb_players:int = 2):
     nb_legs = nb_players
-    wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
-    await wifi_com.initialize()
+    # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
+    # await wifi_com.initialize()
     
     # Initialize EDMOManual
     server = EDMOManual(gopro_list=gopro)

@@ -102,28 +102,27 @@ class EDMOManual:
             
     def logVideoFile(self, dataPath: None):
         filenames = []
-        for gopro_id in self.goPros:
-            file = self.goPros[gopro_id].send_command('get last video', dataPath)
-            filenames.append(file)
+        for i in range(3):
+            for gopro_id in self.goPros:
+                file = self.goPros[gopro_id].send_command('get last video', dataPath)
+                if file is not None:
+                    filenames.append(file)
         return filenames
-    
+
+                
     async def GoProStopAndSave(self, savePath:str = None):
         path = None
-        for i in range(3):
-            self.GoProOff()
-            self.GoProKeepAlive()
-            await self.reset()
-            await asyncio.sleep(3)
-            if savePath is None:
-                # Get the datapath from the Logger of the first edmoSession
-                savePath = self.activeSessions[list(self.activeSessions.keys())[0]].sessionLog.directoryName
-            path = self.logVideoFile(savePath) 
-            self.GoProKeepAlive()
-            print(i, path)
-            if path is not None:
-                return path
-        print("out of the loop for no reason")    
-        
+        self.GoProOff()
+        self.GoProKeepAlive()
+        await self.reset()
+        await asyncio.sleep(3)
+        if savePath is None:
+            # Get the datapath from the Logger of the first edmoSession
+            savePath = self.activeSessions[list(self.activeSessions.keys())[0]].sessionLog.directoryName
+        path = self.logVideoFile(savePath) 
+        self.GoProKeepAlive()
+        return path        
+
     def GoProKeepAlive(self):
         for gopro_id in self.goPros:
             self.goPros[gopro_id].send_command('keep alive')
