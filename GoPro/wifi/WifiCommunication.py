@@ -197,8 +197,9 @@ class WifiCommunication():
                 op = "/gopro/media/last_captured"
                 download_video = True
             case 'get video':
-                file = input('Enter the name of the file to download from the GoPro: ')
-                op = f"/videos/DCIM/100GOPRO/{file}"
+                video_path = input('Enter the name of the folder and file of the video on the GoPro: ')
+                folder, file = video_path.split(" ")
+                op = f"/videos/DCIM/{folder}/{file}"
                 download_video = True
             case 'hilight':    
                 op = "/gopro/media/hilight/moment"
@@ -242,7 +243,8 @@ class WifiCommunication():
                     print(rsp['file'])
                     if 'file' in rsp.keys():
                         file = rsp['file']
-                        url = GOPRO_BASE_URL + f"/videos/DCIM/100GOPRO/{file}"
+                        folder = rsp['folder']
+                        url = GOPRO_BASE_URL + f"/videos/DCIM/{folder}/{file}"
                         response = requests.get(url, timeout=10)            
                         if debug:
                             logger.info(response)

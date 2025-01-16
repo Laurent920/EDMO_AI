@@ -1,86 +1,147 @@
+# visualize_xyz(pose_datas.x, pose_datas.y, pose_datas.z, pose_datas.t, False)
+from EDMOLearning import parameters_to_vector, parameters_to_param_list, param_ranges, generate_unique_key
+from data_analysis import compute_speed, merge_parameter_data
+from EDMOManual import EDMOManual
+from ArUCo_Markers_Pose import pose_data, pose_estimation
+from GoPro.wifi.WifiCommunication import WifiCommunication
+
 import matplotlib.pyplot as plt
-from math import fabs
+import asyncio
+from pathlib import Path
+import json
+import numpy as np
+import os
 
-# Constants for the golden ratio
-R = 0.61803399  # The golden ratio
-C = 1.0 - R     # Complement of the golden ratio
+debug = False
+param_dict = {}
+param_dict_path = f"./Utilities/parameters_dictionnary_{2}.log"
+with open(param_dict_path, 'r') as f:
+    param_dict = json.load(f)
+gopro = ["GoPro 4448"]    
+        
+def visualize_xyz(x, y, z, t, speed, time=False):         
+    # z_axis = t if time else z        
 
-def golden(ax, bx, cx, f, tol):
-    """
-    Perform a golden section search to find the minimum of the function f,
-    with plots of each iteration showing the function and abscissas.
-    """
-    x0, x3 = ax, cx  # Initial points
-    if fabs(cx - bx) > fabs(bx - ax):
-        x1 = bx
-        x2 = bx + C * (cx - bx)  # x0 to x1 is the smaller segment
-    else:
-        x2 = bx
-        x1 = bx - C * (bx - ax)
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
 
-    # Initial function evaluations
-    f1 = f(x1)
-    f2 = f(x2)
+    # ax.plot(x, y, z_axis, color='blue', label='position', linewidth=1)
+    # ax.scatter(x[0], y[0], z_axis[0], color='red', s=10, label='starting point')
 
-    iteration = 0  # Track iteration count
-
-    # Iteratively refine the search
-    while fabs(x3 - x0) > tol * (fabs(x1) + fabs(x2)):
-        # Plot the function and highlight points
-        if iteration == 0:
-            plot_iteration(f, x0, x1, x2, x3, iteration)
-        iteration += 1
-
-        if f2 < f1:
-            # Update points and function evaluations for this case
-            x0, x1, x2 = x1, x2, R * x1 + C * x3
-            f1, f2 = f2, f(x2)
-        else:
-            # Update points and function evaluations for the other case
-            x3, x2, x1 = x2, x1, R * x2 + C * x0
-            f2, f1 = f1, f(x1)
-
-    # Final plot
-    print(f"{iteration} iterations")
-    # plot_iteration(f, x0, x1, x2, x3, iteration, final=True)
-
-    # Determine the final result
-    if f1 < f2:
-        return f1, x1  # Return the minimum value and its abscissa
-    else:
-        return f2, x2
-
-def plot_iteration(f, x0, x1, x2, x3, iteration, final=False):
-    """
-    Plot the function and highlight the abscissas for the current iteration.
-    """
-    x = [i * 0.01 for i in range(int(x0 * 100), int(x3 * 100) + 1)]
-    y = [f(xi) for xi in x]
-
-    plt.figure()
-    plt.plot(x, y, label='f(x)')
-    plt.scatter([x0, x1, x2, x3], [f(x0), f(x1), f(x2), f(x3)], color='red', zorder=5)
-    plt.axvline(x=x1, color='blue', linestyle='--', label='x1')
-    plt.axvline(x=x2, color='green', linestyle='--', label='x2')
-
-    plt.title(f"Iteration {iteration}" + (" (Final)" if final else ""))
-    plt.xlabel('x')
-    plt.ylabel('f(x)')
-    plt.legend()
+    # ax.set_xlabel('X (m)')
+    # ax.set_ylabel('Y (m)')
+    # zlabel = 'Frame number' if time else 'Z (m)'
+    # ax.set_zlabel(zlabel)
+    # ax.legend()
+    
+    
+    plt.figure(figsize=(12, 8))
+    plt.plot(x, y)
+    plt.scatter([x[0], x[-1]], [y[0], y[-1]])
+    x_diff, y_diff = x[-1]-x[0],y[-1]-y[0]
+    plt.legend(['({:.2f}, {:.2f}) => {}'.format(x_diff, y_diff, np.sqrt((x_diff**2+y_diff**2)))] )
+    plt.xlabel("X (m)")
+    plt.ylabel("Y (m)")
+    plt.xlim([0, 1.7])
+    plt.ylim([0, 1.1])
+    plt.title(f"Edmo's movement (speed: {speed} m/s) ")
+    plt.grid()
+    
+    # plt.figure(figsize=(12, 8))
+    # plt.subplot(3, 1, 1)
+    # plt.plot(t, x)
+    # plt.title("X-axis Positions")
+    # plt.xlabel("frame number")
+    # plt.ylabel("X (m)")
+    # plt.grid()
+    
+    # plt.subplot(3, 1, 2)
+    # plt.plot(t, y)
+    # plt.title("Y-axis Positions")
+    # plt.xlabel("frame number")
+    # plt.ylabel("Y (m)")
+    # plt.grid()
+    
+    # plt.subplot(3, 1, 3)
+    # plt.plot(t, z)
+    # plt.title("Z-axis Positions")
+    # plt.xlabel("frame number")
+    # plt.ylabel("Z (m)")
+    # plt.grid()
     plt.show()
 
-# Example usage
+
+async def get_EDMO_speed(server, parameters, nb_legs):
+    vector = parameters_to_vector(parameters)
+    if 0 in vector[:nb_legs] or np.nan in vector:
+        print(f"{vector} in get_EDMO_speed")
+        return 0.0
+    if debug:
+        print(f"parameters in get_EDMO_speed: {parameters}")
+    
+    # Look up the parameters dictionnary if this set already exists
+    key = generate_unique_key(parameters_to_vector(parameters), param_ranges, nb_legs)
+    if key in param_dict.keys():
+        speed, confidence = param_dict[key]
+        if confidence >= 200:
+            print(f"speed: {speed}")
+            return speed
+        
+    # Send input to the server
+    await server.runInputDict(parameters)
+    
+    server.GoProOn()
+    await asyncio.sleep(15) # How long one set of parameter runs
+    filepaths = await server.GoProStopAndSave()
+    
+    print(filepaths)
+    video_path = filepaths[0]
+    filespath = os.path.dirname(video_path) 
+    aruco_pose = pose_estimation.Aruco_pose(video_path) # Get the positions of the Aruco markers
+    dict_all_pos = aruco_pose.pose_estimation() 
+        
+    pose_d = pose_data.Pose_data(filespath, dict_all_pos=dict_all_pos) # Get the positions of the EDMO
+    succeed = pose_d.get_pose()
+    if not succeed:
+        return
+    print("EDMO pose calculation succeeded")
+    edmo_poses = pose_d.edmo_poses
+    edmo_rots = pose_d.edmo_rots
+    exp_edmo_poses = {}
+    exp_edmo_poses[0] = {}
+    valid_frames = pose_d.nbFrames
+    print(f"Valid frames: {valid_frames}")
+    if valid_frames <= 0:
+        return 0.0
+    
+    for frame in range(valid_frames):
+        if frame in edmo_poses:
+            exp_edmo_poses[0][frame] = edmo_poses[frame]
+    
+    param_list = parameters_to_param_list(parameters)
+    exp_edmo_movement = compute_speed(exp_edmo_poses, filespath) # Compute EDMO's speed
+    data = merge_parameter_data({0:param_list}, exp_edmo_movement).to_dict(orient='records')   
+    speed = data[0]['xy frame speed']*30 # m/s
+    print(f"speed: {speed}")
+    print(data)
+    visualize_xyz(pose_d.x, pose_d.y, pose_d.z, pose_d.t, speed, False)        
+
+    # Store the parameters and speed in a hash table
+    param_dict[key] = (speed, valid_frames)
+    return speed
+
+
+async def main():
+    # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
+    # await wifi_com.initialize()
+
+    server = EDMOManual(gopro_list=gopro)
+    asyncio.get_event_loop().create_task(server.run())
+    server.GoProOff()
+    # [90, 58, 98, 100, 359, 62], [90, 90, 73, 92, 113, 174
+    parameters = {0:{'freq':1.0, 'amp':90.0, 'off':0.0,'phb':64.0}, 1:{'freq':1.0, 'amp':90.0, 'off':180.0,'phb':12.0}}
+    await get_EDMO_speed(server, parameters, 2)
+
+
 if __name__ == "__main__":
-    # Define a test function
-    def test_function(x):
-        return (x - 2) ** 2 + 3*x -5
-
-    # Parameters
-    ax, bx, cx = -20.0, -10.0, 20.0
-    print(ax, bx, cx)
-    tol = 1e-5
-
-    # Perform the golden section search with plots
-    min_val, min_x = golden(ax, bx, cx, test_function, tol)
-    print(f"Minimum value: {min_val}")
-    print(f"Minimum occurs at: {min_x}")
+    asyncio.run(main())

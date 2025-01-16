@@ -102,11 +102,12 @@ class EDMOManual:
             
     def logVideoFile(self, dataPath: None):
         filenames = []
-        for i in range(3):
-            for gopro_id in self.goPros:
+        for gopro_id in self.goPros:
+            for i in range(3):
                 file = self.goPros[gopro_id].send_command('get last video', dataPath)
                 if file is not None:
                     filenames.append(file)
+                    break
         return filenames
 
                 
@@ -296,10 +297,10 @@ class EDMOManual:
         
         
     async def close(self):
-        if len(self.activeSessions) == 0:
-            async with self.connected:
-                print("waiting for active sessions in close EDMOManual.py")
-                await self.connected.wait_for(lambda: bool(self.activeSessions))
+        # if len(self.activeSessions) == 0:
+        #     async with self.connected:
+        #         print("waiting for active sessions in close EDMOManual.py")
+        #         await self.connected.wait_for(lambda: bool(self.activeSessions))
         self.closed = True
         for s in [sess for sess in self.activeSessions]:
             session = self.activeSessions[s]

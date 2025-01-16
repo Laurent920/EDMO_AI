@@ -3,7 +3,7 @@ import numpy as np
 import asyncio
 import random
 import argparse
-from math import fabs, sqrt, floor, ceil
+import math
 import os
 from pathlib import Path
 import copy
@@ -20,16 +20,17 @@ from GoPro.wifi.WifiCommunication import WifiCommunication
 
 debug = True
 
-gopro = ["GoPro 6665"]
+gopro = []
 nb_legs = 2
 freq_value = 1.0
 param_ranges = {
     'freq': [1, 1],
     'amp': [0, 90],
     'off': [0, 180],
-    'phb': [0, 359]
+    'phb': [0, 180]
 }
-
+param_dict = {}
+param_dict_path = f"./Utilities/parameters_dictionnary_{nb_legs}.log"
 # region PARAMETER FORMAT: 
 # parameters: {0: {'freq': freq_value, 'amp': amp0, 'off': off0, 'phb': phb0}, 1: {'freq': f, 'amp': amp1, 'off': off1, 'phb': phb1}} needed for EDMOManual
 # param_list: [freq_value, [amp0, amp1], [off0, off1], [phb0, phb1]]                                                                  needed for computing speed
@@ -76,11 +77,20 @@ def vector_to_param_list(vector):
 # region GET EDMO SPEED    
 async def get_EDMO_speed(server, parameters):
     vector = parameters_to_vector(parameters)
-    if vector[:nb_legs] == [0]*nb_legs or np.nan in vector:
+    if 0 in vector[:nb_legs] or np.nan in vector:
         print(f"{vector} in get_EDMO_speed")
         return 0.0
     if debug:
         print(f"parameters in get_EDMO_speed: {parameters}")
+    
+    # Look up the parameters dictionnary if this set already exists
+    key = generate_unique_key(parameters_to_vector(parameters), param_ranges, nb_legs)
+    if key in param_dict.keys():
+        speed, confidence = param_dict[key]
+        if confidence >= 200:
+            print(f"speed: {speed}")
+            return speed
+        
     # Send input to the server
     await server.runInputDict(parameters)
     
@@ -103,24 +113,30 @@ async def get_EDMO_speed(server, parameters):
     edmo_rots = pose_d.edmo_rots
     exp_edmo_poses = {}
     exp_edmo_poses[0] = {}
-    for frame in range(pose_d.nbFrames):
+    valid_frames = pose_d.nbFrames
+    print(f"Valid frames: {valid_frames}")
+    if valid_frames <= 0:
+        return 0.0
+    
+    for frame in range(valid_frames):
         if frame in edmo_poses:
             exp_edmo_poses[0][frame] = edmo_poses[frame]
     
     param_list = parameters_to_param_list(parameters)
     exp_edmo_movement = compute_speed(exp_edmo_poses, filespath) # Compute EDMO's speed
-    data = merge_parameter_data({0:param_list}, exp_edmo_movement)   
+    data = merge_parameter_data({0:param_list}, exp_edmo_movement).to_dict(orient='records')   
+    speed = data[0]['xy frame speed']*30 # m/s
+    print(f"speed: {speed}")
     print(data)
-    speed = data['xy frame speed'][0]*30 # m/s
+    # Store the parameters and speed in a hash table
+    param_dict[key] = (speed, valid_frames)
     return speed
 
 
 # region POWELL
 ftol = 1e-4
-async def Powell(nb_players:int = 2):
+async def Powell(nb_players:int = 2, path:str=None):
     nb_legs = nb_players
-    # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
-    # await wifi_com.initialize()
     
     # Initialize EDMOManual
     server = EDMOManual(gopro_list=gopro)
@@ -129,6 +145,11 @@ async def Powell(nb_players:int = 2):
     
     n = nb_players * (len(param_ranges)-1) # number of dimensions to explore
     u = {dimension+1: [1 if i == dimension else 0 for i in range(n)] for dimension in range(n)} # Initialize the dimensions with unit vectors
+    
+    param_history = []
+    if path is not None:
+        with open(path, 'r') as f:
+            param_history = json.load(f)
 
     parameters = {}
     # Random initialization of parameters
@@ -139,11 +160,10 @@ async def Powell(nb_players:int = 2):
             if key == 'freq':
                 value = freq_value
             parameters[i][key] = float(value)
-
-    # TODO Store the parameters in a hash table
-    param_history = []
-
+    parameters = {0:{'freq':1.0, 'amp':80.0, 'off':60.0,'phb':0.0}, 1:{'freq':1.0, 'amp':60.0, 'off':120.0,'phb':0.0}}
+    
     print(f"random parameters: {parameters}")
+    
     current_speed = await get_EDMO_speed(server, parameters)
     Points = [(parameters_to_vector(parameters), current_speed)]
     current_point = parameters_to_vector(parameters)
@@ -161,8 +181,10 @@ async def Powell(nb_players:int = 2):
             current_speed = max_speed
             iterations += 1
                 
-        param_history.append(Points)
+        param_history.append((Points, u))
+        # Storing the param history
         store_path = f"{server.activeSessions[list(server.activeSessions.keys())[0]].sessionLog.directoryName}/param_history.log"
+        print(f"Storing param history in {store_path}")
         f = open(store_path, "w")
         json.dump(param_history, f)
         speeds = [speed for vector, speed in Points]
@@ -186,6 +208,7 @@ async def Powell(nb_players:int = 2):
         f_E = -extrapolated_speed
         print(f"f_E: {f_E}")
         if f_E >= f_0 or 2*(f_0-2*f_N+f_E)*((f_0-f_N)-max_speed)**2 >= max_speed*(f_0-f_E)**2:
+            print("Direction not replaced")
             pass
         else:
             u[max_speed_index] = PN_P0_direction
@@ -193,10 +216,14 @@ async def Powell(nb_players:int = 2):
         
         Points = []
         
-        if 2.0 * (speeds[-1] - last_speed) <= ftol * (fabs(last_speed) + fabs(speeds[-1])):
+        if 2.0 * (speeds[-1] - last_speed) <= ftol * (math.fabs(last_speed) + math.fabs(speeds[-1])):
             print(f"Convergence reached, maximum found! old: {last_speed}, current: {speeds[-1]}")
+            
+            f = open(param_dict_path, "w")
+            json.dump(param_dict, f)
+            break
         else:
-            print(f"{2.0 * (speeds[-1] - last_speed)} > {ftol * (fabs(last_speed) + fabs(speeds[-1]))}")
+            print(f"{2.0 * (speeds[-1] - last_speed)} > {ftol * (math.fabs(last_speed) + math.fabs(speeds[-1]))}")
         last_speed = speeds[-1]
 
 
@@ -286,7 +313,7 @@ async def golden(ax, bx, cx, fb, p, server):
         pass
 
     f0, f3, fb = -f0, -f3, -fb
-    if fabs(distance(cx, bx)) > fabs(distance(bx, ax)):
+    if math.fabs(distance(cx, bx)) > math.fabs(distance(bx, ax)):
         x1 = bx
         f1 = fb
         x2 = vector_add(bx, vector_mul(C, vector_sub(cx, bx)))  # x0 to x1 is the smaller segment
@@ -305,7 +332,7 @@ async def golden(ax, bx, cx, fb, p, server):
 
     # Iteratively refine the search
     itera = 0
-    while fabs(distance(x3, x0)) > tol * (fabs(norm(x1)) + fabs(norm(x2))):
+    while math.fabs(distance(x3, x0)) > tol * (math.fabs(norm(x1)) + math.fabs(norm(x2))):
         print(f"in while loop:{itera}")
         if f2 < f1:
             x0, x1, x2 = x1, x2, vector_add(vector_mul(R, x1), vector_mul(C, x3))
@@ -334,25 +361,75 @@ def vector_mul(value, l:list):
     return [x * value for x in l]
 
 def norm(l:list):
-    return sqrt(sum(x**2 for x in l))
+    return math.sqrt(sum(x**2 for x in l))
 
 def distance(point1:list, point2:list):
     if len(point1) != len(point2):
         raise ValueError("Both points must have the same dimensions.")
     
-    return sqrt(sum((a - b) ** 2 for a, b in zip(point1, point2)))
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(point1, point2)))
 
-def fill_parameters(parameters, id, param):
-    def setter(value):
-        updated_parameters = copy.deepcopy(parameters)
-        updated_parameters[id][param] = value
-        return updated_parameters
-    return setter
+def generate_unique_key(values, param_ranges, nb_legs):
+    """
+    Generate a unique key for a list of parameter values using bitwise encoding,
+    skipping the 'freq' parameter.
+
+    Args:
+        values (list): List of parameter values (flattened) for all sets.
+        param_ranges (dict): Dictionary defining the ranges for each parameter.
+        num_sets (int): Number of sets of parameters.
+
+    Returns:
+        int: A unique key for the parameter combination.
+    """
+    bitwise_key = 0
+    total_bits = 0
+    
+    ordered_params = ["amp", "off", "phb"]  # Define the order of parameters explicitly
+    params_to_encode = {}
+
+    for param in ordered_params:
+        for i in range(1, nb_legs + 1):
+            if param in param_ranges:
+                params_to_encode[f"{param}{i}"] = tuple(param_ranges[param])
+
+    for value, param in zip(values, params_to_encode):        
+        min_val, max_val = params_to_encode[param]
+        # Normalize the value
+        normalized_value = int(value - min_val)
+        
+        # Calculate the number of bits required for this parameter
+        range_size = max_val - min_val + 1
+        bits = math.ceil(math.log2(range_size))
+        
+        # Shift the existing key and add the new parameter value
+        bitwise_key |= (normalized_value << total_bits)
+        
+        # Update the total number of bits used so far
+        total_bits += bits
+
+    return bitwise_key
+
+
+def compute_directions_from_points(Points:list[list[list, float]]):
+    for points in Points: # list of all the points in one iteration through every dimension
+        for point in points:
+            param, speed = point
+
 
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--explore", nargs="?", help="Type of EDMO you want to explore (default: Snake)", const="Snake")
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path", nargs="?", help="Path to the parameter history", const=None)
+    args = parser.parse_args()
     
-    asyncio.run(Powell())
+    path = args.path    
+
+    gopro = ["GoPro 4448"]    
+    # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
+    # await wifi_com.initialize()
+
+    with open(param_dict_path, 'r') as f:
+        param_dict = json.load(f)
+
+    asyncio.run(Powell(path=path))

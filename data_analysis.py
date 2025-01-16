@@ -130,6 +130,9 @@ def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
         per_frame_x_speed, per_frame_y_speed, per_frame_z_speed = 0.0, 0.0, 0.0
         
         frame_keys = list(positions.keys())
+        if len(frame_keys) <= 0:
+            print("In compute_speed: zero valid frame")
+            return {}
         nb_frames = frame_keys[-1] - frame_keys[0] + 1
         previous_el = None
         for i, pos_frame in enumerate(positions.items()):
@@ -144,7 +147,7 @@ def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
             y_diff = (y_next-y)/frame_diff
             z_diff = (z_next-z)/frame_diff
             
-            threshold = 0.01
+            threshold = 0.05
             if abs(x_diff) > threshold or abs(y_diff) > threshold:
                 previous_el = pos_frame
                 nb_frames -= frame_diff
@@ -157,12 +160,14 @@ def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
             y_speed += y_diff
             z_speed += z_diff
             
-            per_frame_x_speed += abs(x_diff)
-            per_frame_y_speed += abs(y_diff)
-            per_frame_z_speed += abs(z_diff)
+            per_frame_x_speed += (x_diff)
+            per_frame_y_speed += (y_diff)
+            per_frame_z_speed += (z_diff)
             
             previous_el = pos_frame
-            
+        
+        # print(f"nb frames: {nb_frames}")
+    
         per_frame_x_speed = x_speed/nb_frames
         per_frame_y_speed = y_speed/nb_frames
         per_frame_z_speed = z_speed/nb_frames
@@ -172,7 +177,7 @@ def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
         per_frame_xy_speed = float(np.sqrt(per_frame_x_speed**2 + per_frame_y_speed**2))     
                
         exp_edmo_movement[exp_nb] =[x_speed, y_speed, z_speed, global_speed, xy_speed,\
-                                    per_frame_x_speed, per_frame_y_speed, per_frame_z_speed, per_frame_global_speed, per_frame_xy_speed, exp_nb]
+                                    per_frame_x_speed, per_frame_y_speed, per_frame_z_speed, per_frame_global_speed, per_frame_xy_speed, exp_nb, nb_frames]
         f = open(f"{filepath}/speed_data.log", "w")
         json.dump(exp_edmo_movement, f)
     n = 3
@@ -192,7 +197,7 @@ def merge_parameter_data(all_input, exp_edmo_movement):
     '''
     global plot_data
     amp1, amp2, off1, off2, phb_diff, speeds = [], [], [], [], [], {}
-    for i in range(11): 
+    for i in range(12): 
         speeds[i] = []
     for exp_nb, speed in exp_edmo_movement.items():
         inputs = all_input[exp_nb] # (freq, (amp0, amp1), (off0, off1), (phb0, phb1))
@@ -201,8 +206,9 @@ def merge_parameter_data(all_input, exp_edmo_movement):
         off1.append(inputs[2][0])
         off2.append(inputs[2][1])
         phb_diff.append(abs(inputs[3][0]-inputs[3][1]))
-        for i in range(11): 
+        for i in range(12): 
             speeds[i].append(speed[i]) 
+        
         
     data = pd.DataFrame({
         'Amp_motor_1': amp1,
@@ -220,7 +226,8 @@ def merge_parameter_data(all_input, exp_edmo_movement):
         'z frame speed' : speeds[7],
         'xyz frame speed' : speeds[8],
         'xy frame speed' : speeds[9],
-        'exp nb' : speeds[10]
+        'exp nb' : speeds[10],
+        'nb frames' : speeds[11]
     })
     
     plot_data = pd.concat([plot_data, data], ignore_index=True) if plot_data is not None else data  
