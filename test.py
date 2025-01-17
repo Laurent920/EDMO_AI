@@ -19,55 +19,63 @@ with open(param_dict_path, 'r') as f:
     param_dict = json.load(f)
 gopro = ["GoPro 4448"]    
         
-def visualize_xyz(x, y, z, t, speed, time=False):         
-    # z_axis = t if time else z        
+        
+def visualize_xyz(x, y, z, t, time=False):         
+    z_axis = t if time else z        
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
 
-    # ax.plot(x, y, z_axis, color='blue', label='position', linewidth=1)
-    # ax.scatter(x[0], y[0], z_axis[0], color='red', s=10, label='starting point')
+    ax.plot(x, y, z_axis, color='blue', label='position', linewidth=1)
+    ax.scatter(x[0], y[0], z_axis[0], color='red', s=10, label='starting point')
 
-    # ax.set_xlabel('X (m)')
-    # ax.set_ylabel('Y (m)')
-    # zlabel = 'Frame number' if time else 'Z (m)'
-    # ax.set_zlabel(zlabel)
-    # ax.legend()
-    
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+    zlabel = 'Frame number' if time else 'Z (m)'
+    ax.set_zlabel(zlabel)
+    ax.legend()
     
     plt.figure(figsize=(12, 8))
+    plt.subplot(3, 1, 1)
+    plt.plot(t, x)
+    plt.title("X-axis Positions")
+    plt.xlabel("frame number")
+    plt.ylabel("X (m)")
+    plt.grid()
+    
+    plt.subplot(3, 1, 2)
+    plt.plot(t, y)
+    plt.title("Y-axis Positions")
+    plt.xlabel("frame number")
+    plt.ylabel("Y (m)")
+    plt.grid()
+    
+    plt.subplot(3, 1, 3)
+    plt.plot(t, z)
+    plt.title("Z-axis Positions")
+    plt.xlabel("frame number")
+    plt.ylabel("Z (m)")
+    plt.grid()
+    plt.show()
+    
+    
+def visualize_xy(x, y, speed):         
+    plt.figure(figsize=(12, 8))
+    
     plt.plot(x, y)
     plt.scatter([x[0], x[-1]], [y[0], y[-1]])
     x_diff, y_diff = x[-1]-x[0],y[-1]-y[0]
     plt.legend(['({:.2f}, {:.2f}) => {}'.format(x_diff, y_diff, np.sqrt((x_diff**2+y_diff**2)))] )
+    
     plt.xlabel("X (m)")
     plt.ylabel("Y (m)")
+    
     plt.xlim([0, 1.7])
     plt.ylim([0, 1.1])
+    
     plt.title(f"Edmo's movement (speed: {speed} m/s) ")
     plt.grid()
-    
-    # plt.figure(figsize=(12, 8))
-    # plt.subplot(3, 1, 1)
-    # plt.plot(t, x)
-    # plt.title("X-axis Positions")
-    # plt.xlabel("frame number")
-    # plt.ylabel("X (m)")
-    # plt.grid()
-    
-    # plt.subplot(3, 1, 2)
-    # plt.plot(t, y)
-    # plt.title("Y-axis Positions")
-    # plt.xlabel("frame number")
-    # plt.ylabel("Y (m)")
-    # plt.grid()
-    
-    # plt.subplot(3, 1, 3)
-    # plt.plot(t, z)
-    # plt.title("Z-axis Positions")
-    # plt.xlabel("frame number")
-    # plt.ylabel("Z (m)")
-    # plt.grid()
+
     plt.show()
 
 
@@ -135,11 +143,14 @@ async def main():
     # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
     # await wifi_com.initialize()
 
-    server = EDMOManual(gopro_list=gopro)
+    server = EDMOManual(gopro_list=[])
     asyncio.get_event_loop().create_task(server.run())
     server.GoProOff()
-    # [90, 58, 98, 100, 359, 62], [90, 90, 73, 92, 113, 174
-    parameters = {0:{'freq':1.0, 'amp':90.0, 'off':0.0,'phb':64.0}, 1:{'freq':1.0, 'amp':90.0, 'off':180.0,'phb':12.0}}
+
+    parameters = {0:{'freq':1.0, 'amp':90.0, 'off':0.0,'phb':64.0}, 1:{'freq':1.0, 'amp':90.0, 'off':180.0,'phb':12.0}} # 0.04225769274242996
+    parameters = {0:{'freq':1.0, 'amp':90.0, 'off':98.0,'phb':359.0}, 1:{'freq':1.0, 'amp':58.0, 'off':100.0,'phb':62.0}} # 0.039866116498910815
+    parameters = {0:{'freq':1.0, 'amp':90.0, 'off':73.0,'phb':113.0}, 1:{'freq':1.0, 'amp':90.0, 'off':92.0,'phb':174.0}} # 0.03527106322744506
+
     await get_EDMO_speed(server, parameters, 2)
 
 
