@@ -120,22 +120,27 @@ def data_analysis(dir, nbPlayers: int = 2):
 def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
     '''
         Speed: units=meter per frame, sum of speed over the course of one experiment
-        abs_speed: units=meter per frame, averaged sum of absolute speed over the course of one experiment
-        Movement: units=meters, maximum displacement over the course of one experiment
+        Displacement: units=meters, maximum displacement over the course of one experiment
     '''
     exp_edmo_movement = {}
     x_all_diff, y_all_diff, z_all_diff = [], [], []
     for exp_nb, positions in exp_edmo_poses.items():
-        x_speed, y_speed, z_speed = 0.0, 0.0, 0.0
         per_frame_x_speed, per_frame_y_speed, per_frame_z_speed = 0.0, 0.0, 0.0
         
         frame_keys = list(positions.keys())
         if len(frame_keys) <= 0:
             print("In compute_speed: zero valid frame")
             return {}
+        
         nb_frames = frame_keys[-1] - frame_keys[0] + 1
         previous_el = None
-        for i, pos_frame in enumerate(positions.items()):
+        first_pose, last_pose = positions[frame_keys[0]], positions[frame_keys[-1]]
+        x_displacement = abs(last_pose[0] - first_pose[0])
+        y_displacement = abs(last_pose[1] - first_pose[1])
+        z_displacement = abs(last_pose[2] - first_pose[2])
+        
+        # For each succession of frame and positions we compute the difference of position
+        for i, pos_frame in enumerate(positions.items()): 
             if previous_el is None:
                 previous_el = pos_frame
                 continue
@@ -147,53 +152,55 @@ def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
             y_diff = (y_next-y)/frame_diff
             z_diff = (z_next-z)/frame_diff
             
-            threshold = 0.05
-            if abs(x_diff) > threshold or abs(y_diff) > threshold:
+            threshold = 0.04
+            if abs(x_diff) > threshold or abs(y_diff) > threshold: # Too big of a movement per frame means the edmo was moved by an external force
                 previous_el = pos_frame
                 nb_frames -= frame_diff
+                x_displacement -= abs(x_diff*frame_diff)
+                y_displacement -= abs(y_diff*frame_diff)
+                z_displacement -= abs(z_diff*frame_diff)
                 continue
             x_all_diff.append(x_diff)
             y_all_diff.append(y_diff)
             z_all_diff.append(z_diff)
             
-            x_speed += x_diff
-            y_speed += y_diff
-            z_speed += z_diff
-            
-            per_frame_x_speed += (x_diff)
-            per_frame_y_speed += (y_diff)
-            per_frame_z_speed += (z_diff)
+            per_frame_x_speed += x_diff
+            per_frame_y_speed += y_diff
+            per_frame_z_speed += z_diff
             
             previous_el = pos_frame
         
-        # print(f"nb frames: {nb_frames}")
-    
-        per_frame_x_speed = x_speed/nb_frames
-        per_frame_y_speed = y_speed/nb_frames
-        per_frame_z_speed = z_speed/nb_frames
-        global_speed = float(np.sqrt(x_speed**2 + y_speed**2 + z_speed**2))    
-        xy_speed = float(np.sqrt(x_speed**2 + y_speed**2))
+        per_frame_x_speed /= nb_frames
+        per_frame_y_speed /= nb_frames
+        per_frame_z_speed /= nb_frames
+        x_displacement /= nb_frames
+        y_displacement /= nb_frames
+        z_displacement /= nb_frames
         per_frame_global_speed = float(np.sqrt(per_frame_x_speed**2 + per_frame_y_speed**2 + per_frame_z_speed**2))            
-        per_frame_xy_speed = float(np.sqrt(per_frame_x_speed**2 + per_frame_y_speed**2))     
-               
-        exp_edmo_movement[exp_nb] =[x_speed, y_speed, z_speed, global_speed, xy_speed,\
-                                    per_frame_x_speed, per_frame_y_speed, per_frame_z_speed, per_frame_global_speed, per_frame_xy_speed, exp_nb, nb_frames]
+        per_frame_xy_speed = float(np.sqrt(per_frame_x_speed**2 + per_frame_y_speed**2))   
+        per_frame_global_displacement = float(np.sqrt(x_displacement**2 + y_displacement**2 + z_displacement**2))            
+        per_frame_xy_displacement = float(np.sqrt(x_displacement**2 + y_displacement**2)) 
+        print(f"per_frame_global_displacement: {per_frame_global_displacement}")
+        
+        exp_edmo_movement[exp_nb] =[per_frame_x_speed, per_frame_y_speed, per_frame_z_speed, per_frame_global_speed, per_frame_xy_speed, 
+                                    x_displacement, y_displacement, z_displacement, per_frame_global_displacement, per_frame_xy_displacement, exp_nb, nb_frames]
         f = open(f"{filepath}/speed_data.log", "w")
         json.dump(exp_edmo_movement, f)
-    n = 3
-    print(f'avg x displacement: {sum(x_all_diff) / len(x_all_diff)}, max : {heapq.nlargest(n, x_all_diff)}, min : {heapq.nsmallest(n, x_all_diff)}')
-    print(f'avg y displacement: {sum(y_all_diff) / len(y_all_diff)}, max : {heapq.nlargest(n, y_all_diff)}, min : {heapq.nsmallest(n,y_all_diff)}')
-    print(f'avg z displacement: {sum(z_all_diff) / len(z_all_diff)}, max : {heapq.nlargest(n, z_all_diff)}, min : {heapq.nsmallest(n,z_all_diff)}')
+    if debug:
+        n = 3
+        print(f'avg x displacement: {sum(x_all_diff) / len(x_all_diff)}, max : {heapq.nlargest(n, x_all_diff)}, min : {heapq.nsmallest(n, x_all_diff)}')
+        print(f'avg y displacement: {sum(y_all_diff) / len(y_all_diff)}, max : {heapq.nlargest(n, y_all_diff)}, min : {heapq.nsmallest(n,y_all_diff)}')
+        print(f'avg z displacement: {sum(z_all_diff) / len(z_all_diff)}, max : {heapq.nlargest(n, z_all_diff)}, min : {heapq.nsmallest(n,z_all_diff)}')
     return exp_edmo_movement
 
 
 def merge_parameter_data(all_input, exp_edmo_movement): 
     '''
     Where speed_type is an integer:
-    1,2,3 : x,y,z speed
-    4,5 : xyz speed, xy speed
-    6,7,8 : x,y,z average per frame speed
-    9, 10 : xyz, xy average per frame speed
+    1,2,3 : x,y,z per frame speed
+    4,5 : xyz per frame speed, xy per frame speed
+    6,7,8 : x,y,z displacement per frame
+    9, 10 : experiment number, number of frames
     '''
     global plot_data
     amp1, amp2, off1, off2, phb_diff, speeds = [], [], [], [], [], {}
@@ -216,16 +223,16 @@ def merge_parameter_data(all_input, exp_edmo_movement):
         'Offset_motor_1': off1,
         'Offset_motor_2': off2,
         'Phase_difference': phb_diff,
-        'x speed' : speeds[0],
-        'y speed' : speeds[1],
-        'z speed' : speeds[2],
-        'xyz speed' : speeds[3],
-        'xy speed' : speeds[4],
-        'x frame speed' : speeds[5],
-        'y frame speed' : speeds[6],
-        'z frame speed' : speeds[7],
-        'xyz frame speed' : speeds[8],
-        'xy frame speed' : speeds[9],
+        'x frame speed' : speeds[0],
+        'y frame speed' : speeds[1],
+        'z frame speed' : speeds[2],
+        'xyz frame speed' : speeds[3],
+        'xy frame speed' : speeds[4],
+        'x frame displacement' : speeds[5],
+        'y frame displacement' : speeds[6],
+        'z frame displacement' : speeds[7],
+        'xyz frame displacement' : speeds[8],
+        'xy frame displacement' : speeds[9],
         'exp nb' : speeds[10],
         'nb frames' : speeds[11]
     })

@@ -50,7 +50,7 @@ def parameters_to_param_list(parameters):
 
 def parameters_to_vector(parameters):
     param_list = parameters_to_param_list(parameters)
-    return [value for value_list in param_list[1:] for value in value_list]
+    return np.array([value for value_list in param_list[1:] for value in value_list])
 
 def vector_to_parameters(vector):
     parameters = {}
@@ -110,7 +110,6 @@ async def get_EDMO_speed(server, parameters):
         return
     print("EDMO pose calculation succeeded")
     edmo_poses = pose_d.edmo_poses
-    edmo_rots = pose_d.edmo_rots
     exp_edmo_poses = {}
     exp_edmo_poses[0] = {}
     valid_frames = pose_d.nbFrames
@@ -126,6 +125,7 @@ async def get_EDMO_speed(server, parameters):
     exp_edmo_movement = compute_speed(exp_edmo_poses, filespath) # Compute EDMO's speed
     data = merge_parameter_data({0:param_list}, exp_edmo_movement).to_dict(orient='records')   
     speed = data[0]['xy frame speed']*30 # m/s
+    speed = data[0]['xy frame displacement']*30
     print(f"speed: {speed}")
     print(data)
     # Store the parameters and speed in a hash table
@@ -160,7 +160,7 @@ async def Powell(nb_players:int = 2, path:str=None):
             if key == 'freq':
                 value = freq_value
             parameters[i][key] = float(value)
-    parameters = {0:{'freq':1.0, 'amp':80.0, 'off':60.0,'phb':0.0}, 1:{'freq':1.0, 'amp':60.0, 'off':120.0,'phb':0.0}}
+    # parameters = {0:{'freq':1.0, 'amp':80.0, 'off':60.0,'phb':0.0}, 1:{'freq':1.0, 'amp':60.0, 'off':120.0,'phb':0.0}}
     
     print(f"random parameters: {parameters}")
     
@@ -172,8 +172,8 @@ async def Powell(nb_players:int = 2, path:str=None):
     for _ in range(100):
         # Golden section search for each dimension
         for i in range(n):
-            vector_min, vector_max = line_min_max(current_point, u[i+1])
-            max_speed, new_point = await golden(vector_min, current_point, vector_max, current_speed, vector_to_parameters, server)
+            vector_min, middle, vector_max = line_min_max(current_point, u[i+1])
+            max_speed, new_point = await golden(vector_min, middle, vector_max, current_speed, vector_to_parameters, server)
             new_point = [round(x) for x in new_point]
             
             Points.append((new_point, max_speed))
@@ -199,10 +199,10 @@ async def Powell(nb_players:int = 2, path:str=None):
         # Powell's conditions
         f_0 = -speeds[0]
         f_N = -speeds[-1]
-        extra_point = vector_sub(vector_mul(2, vectors[-1]), vectors[0]) # 2*P_N-P_0 
+        extra_point = ((2 * vectors[-1]) - vectors[0]) # 2*P_N-P_0 
         print(f"f0:{f_0}, f_N:{f_N}, max_speed:{max_speed}, extrapoint:{extra_point}")
         
-        PN_P0_direction = vector_sub(vectors[-1], vectors[0])
+        PN_P0_direction = (vectors[-1] - vectors[0])
         extra_point = line_min_max(current_point, PN_P0_direction, extra_point)
         extrapolated_speed = await get_EDMO_speed(server, vector_to_parameters(extra_point))
         f_E = -extrapolated_speed
@@ -216,6 +216,7 @@ async def Powell(nb_players:int = 2, path:str=None):
         
         Points = []
         
+        # Ending conditions
         if 2.0 * (speeds[-1] - last_speed) <= ftol * (math.fabs(last_speed) + math.fabs(speeds[-1])):
             print(f"Convergence reached, maximum found! old: {last_speed}, current: {speeds[-1]}")
             
@@ -254,6 +255,15 @@ def line_min_max(point, direction, extra_point=None):
         print(f"direction:{direction}, upper_diff:{upper_diff}, lower_diff:{lower_diff}, point:{point}")
         print(min_lower_diff, min_upper_diff)
     
+    # if the point is already at an extremum along the direction we take a random point in order to get out of a potential local maximum
+    rand = random.randint(1, 10)
+    if min_lower_diff == 0:
+        min_lower_diff = -rand
+    elif min_upper_diff == 0:
+        min_upper_diff = -rand
+    else:
+        pass
+    
     min_point, max_point = [], []
     for i, dim in enumerate(direction):
         min_point.append(float(point[i]+(min_upper_diff*dim)))
@@ -268,7 +278,13 @@ def line_min_max(point, direction, extra_point=None):
         else:
             return extra_point
     
-    return min_point, max_point
+    if distance(min_point, max_point) >= distance(point, max_point):
+        return min_point, point, max_point
+    else: # the point is at an extremum but which one
+        if distance(min_point, point) >= distance(max_point, point):
+            return min_point, max_point, point
+        else:
+            return point, min_point, max_point
 
 
 # Constants for the golden ratio
@@ -278,21 +294,21 @@ tol = 1e-5
 async def golden(ax, bx, cx, fb, p, server):
     """
     Perform a golden section search to find the minimum of the function.
-    Our function is minus the speed of the EDMO(get_EDMO_speed).
+    Our function is minus the speed of the EDMO (get_EDMO_speed()).
     Maximizing the speed == Minimizing minus the speed
 
     Parameters:
         ax, bx, cx: vector of floats on a single line in n dimensions
             The bracketing triplet of abscissas (bx is between ax and cx).
-        f: function
-            The function to minimize.
-        tol: float
-            The tolerance for the fractional precision.
-
+        fb: Speed of the EDMO at bx
+        p: The function that turns a vector into parameters
+        server: an instance of EDMOManual
+        
     Returns:
-        float: The minimum minus speed.
-        float: The position(vector) of the minimum.
+        float: The maximum speed.
+        float: The position (vector) of the maximum.
     """
+    
     x0, x3 = ax, cx  
     parameters0, parameters3 = p(x0), p(x3)
     print(f"Initial parameters computation ax, bx, cx:{ax}, {bx}, {cx}")
@@ -316,14 +332,14 @@ async def golden(ax, bx, cx, fb, p, server):
     if math.fabs(distance(cx, bx)) > math.fabs(distance(bx, ax)):
         x1 = bx
         f1 = fb
-        x2 = vector_add(bx, vector_mul(C, vector_sub(cx, bx)))  # x0 to x1 is the smaller segment
+        x2 = bx + (C * (cx - bx))  # x0 to x1 is the smaller segment
         print("f2 computation...")
         f2 = await get_EDMO_speed(server, parameters=p(x2))
         f2 = -f2
     else:
         x2 = bx
         f2 = fb
-        x1 = vector_sub(bx, vector_mul(C, vector_sub(bx, ax)))
+        x1 = (bx - (C * (bx - ax)))
         print("f1 computation...")
         f1 = await get_EDMO_speed(server, parameters=p(x1))
         f1 = -f1
@@ -335,11 +351,11 @@ async def golden(ax, bx, cx, fb, p, server):
     while math.fabs(distance(x3, x0)) > tol * (math.fabs(norm(x1)) + math.fabs(norm(x2))):
         print(f"in while loop:{itera}")
         if f2 < f1:
-            x0, x1, x2 = x1, x2, vector_add(vector_mul(R, x1), vector_mul(C, x3))
+            x0, x1, x2 = x1, x2, ((R* x1) + (C * x3))
             f1, f2 = f2, await get_EDMO_speed(server, p(x2))
             f2 = -f2
         else:
-            x3, x2, x1 = x2, x1, vector_add(vector_mul(R, x2), vector_mul(C, x0))
+            x3, x2, x1 = x2, x1, ((R * x2) + (C * x0))
             f2, f1 = f1, await get_EDMO_speed(server, p(x1))
             f1 = -f1
         itera += 1
@@ -410,13 +426,33 @@ def generate_unique_key(values, param_ranges, nb_legs):
 
     return bitwise_key
 
-
-def compute_directions_from_points(Points:list[list[list, float]]):
-    for points in Points: # list of all the points in one iteration through every dimension
-        for point in points:
-            param, speed = point
-
-
+def closest_line(point, lines):
+    """
+    Finds the closest line to a given point in 6D space.
+    
+    Args:
+        point: A numpy array of shape (6,), the point in 6D space.
+        lines: A list of tuples, where each tuple contains:
+               - A numpy array (6,) representing a point on the line.
+               - A numpy array (6,) representing the direction of the line.
+               
+    Returns:
+        The index of the closest line and the shortest distance.
+    """
+    min_distance = float('inf')
+    closest_line_idx = -1
+    
+    for idx, (p0, d) in enumerate(lines):
+        v = point - p0
+        t = np.dot(v, d) / np.dot(d, d)  # Projection scalar
+        proj_point = p0 + t * d          # Projected point on the line
+        distance = np.linalg.norm(point - proj_point)  # Distance to the line
+        
+        if distance < min_distance:
+            min_distance = distance
+            closest_line_idx = idx
+            
+    return closest_line_idx, min_distance
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

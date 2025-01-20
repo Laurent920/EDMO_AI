@@ -280,11 +280,7 @@ class EDMOManual:
     async def run(self, explore:bool=False) -> None:
         if self.dataPath:
             replayFile = asyncio.get_event_loop().create_task(self.parseInputFile("f " + self.dataPath, explore))
-        
-        # async with self.connected:
-        #     print("waiting for active sessions in run EDMOManual.py")
-        #     await self.connected.wait_for(lambda: bool(self.activeSessions))
-        
+    
         try:
             while not self.closed: 
                 await self.update()
@@ -297,10 +293,6 @@ class EDMOManual:
         
         
     async def close(self):
-        # if len(self.activeSessions) == 0:
-        #     async with self.connected:
-        #         print("waiting for active sessions in close EDMOManual.py")
-        #         await self.connected.wait_for(lambda: bool(self.activeSessions))
         self.closed = True
         for s in [sess for sess in self.activeSessions]:
             session = self.activeSessions[s]
