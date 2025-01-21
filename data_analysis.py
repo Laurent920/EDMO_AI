@@ -76,32 +76,6 @@ def data_analysis(dir, nbPlayers: int = 2):
             time_end = toDatetime(motor1[motor_range[1]].split(',')[0])
             frame_start = time_start.seconds * fps + round(time_start.microseconds/1e6 * fps)
             frame_end = time_end.seconds * fps + round(time_end.microseconds/1e6 * fps)
-            # print(f'{frame_start} - {frame_end}')
-            
-        # Sanity check
-            # input = input_range[i]
-            # for i in range(motor_range[0], motor_range[1]):
-            #     motor0_value = motor0[i]
-            #     motor1_value = motor1[i]
-            #     data0 = motor0_value.split(sep=',')
-            #     data1 = motor1_value.split(sep=',')
-
-            #     freq = abs(input[0] - float(data0[1]))
-            #     amp = abs(input[1][0] - float(data0[2]))
-            #     off = abs(input[2][0] - float(data0[3]))        
-            #     phb = abs(input[3][0] - float(data0[4]))
-                
-            #     if freq > 0.1 or amp > 2 or off > 3 or phb > 0.07:
-            #         print("Mistake in motor0 range => not corresponding to the input")
-                    
-            #     freq = abs(input[0] - float(data1[1]))
-            #     amp = abs(input[1][1] - float(data1[2]))
-            #     off = abs(input[2][1] - float(data1[3]))        
-            #     phb = abs(input[3][1] - float(data1[4]))
-                
-            #     if freq > 0.1 or amp > 2 or off > 3 or phb > 0.07:
-            #         print("Mistake in motor1 range => not corresponding to the input")
-            
 
             for frame in range(frame_start, frame_end):
                 if frame in edmo_poses:
@@ -152,7 +126,7 @@ def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
             y_diff = (y_next-y)/frame_diff
             z_diff = (z_next-z)/frame_diff
             
-            threshold = 0.04
+            threshold = 0.1
             if abs(x_diff) > threshold or abs(y_diff) > threshold: # Too big of a movement per frame means the edmo was moved by an external force
                 previous_el = pos_frame
                 nb_frames -= frame_diff

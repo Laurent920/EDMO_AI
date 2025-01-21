@@ -16,7 +16,6 @@ from ArUCo_Markers_Pose import pose_data, pose_estimation
 from GoPro.wifi.WifiCommunication import WifiCommunication
 
 #TODO: livestream gopro frames
-#TODO: Powell termination criterion adjustment
 
 debug = True
 
@@ -86,10 +85,10 @@ async def get_EDMO_speed(server, parameters):
     # Look up the parameters dictionnary if this set already exists
     key = generate_unique_key(parameters_to_vector(parameters), param_ranges, nb_legs)
     if key in param_dict.keys():
-        speed, confidence = param_dict[key]
+        speed, displacement, confidence = param_dict[key]
         if confidence >= 200:
-            print(f"speed: {speed}")
-            return speed
+            print(f"speed: {speed}, displacement: {displacement}")
+            return displacement
         
     # Send input to the server
     await server.runInputDict(parameters)
@@ -125,17 +124,19 @@ async def get_EDMO_speed(server, parameters):
     exp_edmo_movement = compute_speed(exp_edmo_poses, filespath) # Compute EDMO's speed
     data = merge_parameter_data({0:param_list}, exp_edmo_movement).to_dict(orient='records')   
     speed = data[0]['xy frame speed']*30 # m/s
-    speed = data[0]['xy frame displacement']*30
-    print(f"speed: {speed}")
+    displacement = data[0]['xy frame displacement']*30
+    print(f"speed: {speed}, displacement: {displacement}")
     print(data)
     # Store the parameters and speed in a hash table
-    param_dict[key] = (speed, valid_frames)
-    return speed
+    param_dict[key] = (speed, displacement, valid_frames)
+    return displacement
 
 
 # region POWELL
-ftol = 1e-4
 async def Powell(nb_players:int = 2, path:str=None):
+    # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
+    # await wifi_com.initialize()
+    
     nb_legs = nb_players
     
     # Initialize EDMOManual
@@ -153,42 +154,56 @@ async def Powell(nb_players:int = 2, path:str=None):
 
     parameters = {}
     # Random initialization of parameters
-    for i in range(nb_players):
-        parameters[i] = {}
-        for _, (key, param_range) in enumerate(param_ranges.items()):
-            value = random.randint(*param_range)
-            if key == 'freq':
-                value = freq_value
-            parameters[i][key] = float(value)
+    # for i in range(nb_players):
+    #     parameters[i] = {}
+    #     for _, (key, param_range) in enumerate(param_ranges.items()):
+    #         value = random.randint(*param_range)
+    #         if key == 'freq':
+    #             value = freq_value
+    #         parameters[i][key] = float(value)
     # parameters = {0:{'freq':1.0, 'amp':80.0, 'off':60.0,'phb':0.0}, 1:{'freq':1.0, 'amp':60.0, 'off':120.0,'phb':0.0}}
-    
+    init_random_point = [27.0, 58.0, 127.0, 100.0, 227.0, 62.0]
+    # [87.0, 78.0, 168.0, 106.0, 154.0, 124.0]
+    # [45.0, 5.0, 7.0, 92.0, 113.0, 174.0]
+    # [43.0, 46.0, 57.0, 58.0, 44.0, 34.0]
+    # [0.0, 84.0, 79.0, 89.0, 50.0, 80.0]
+    # [17.0, 38.0, 137.0, 81.0, 36.0, 173.0]
+    # [43.0, 30.0, 45.0, 131.0, 132.0, 69.0]
+    # [63.0, 77.0, 115.0, 168.0, 122.0, 178.0]
+    # [63.0, 77.0, 115.0, 168.0, 122.0, 178.0]
+    # [70.0, 11.0, 141.0, 15.0, 87.0, 126.0]
+    # [60.0, 24.0, 105.0, 3.0, 150.0, 102.0]
+    # [80.0, 77.0, 10.0, 168.0, 120.0, 12.0]
+    parameters = vector_to_parameters(init_random_point)
     print(f"random parameters: {parameters}")
     
     current_speed = await get_EDMO_speed(server, parameters)
-    Points = [(parameters_to_vector(parameters), current_speed)]
+    Points = [(parameters_to_vector(parameters).tolist(), current_speed)]
     current_point = parameters_to_vector(parameters)
     iterations = 1
     last_speed = 0
+    random_modified = False
     for _ in range(100):
         # Golden section search for each dimension
         for i in range(n):
             vector_min, middle, vector_max = line_min_max(current_point, u[i+1])
             max_speed, new_point = await golden(vector_min, middle, vector_max, current_speed, vector_to_parameters, server)
-            new_point = [round(x) for x in new_point]
+            new_point = np.array([round(x) for x in new_point])
             
-            Points.append((new_point, max_speed))
+            Points.append((new_point.tolist(), max_speed))
             current_point = new_point
             current_speed = max_speed
             iterations += 1
-                
+
         param_history.append((Points, u))
         # Storing the param history
         store_path = f"{server.activeSessions[list(server.activeSessions.keys())[0]].sessionLog.directoryName}/param_history.log"
         print(f"Storing param history in {store_path}")
         f = open(store_path, "w")
         json.dump(param_history, f)
+        f.close()
         speeds = [speed for vector, speed in Points]
-        vectors = [vector for vector, speed in Points]
+        vectors = [np.array(vector) for vector, speed in Points]
         
         # Discarding the Direction of Largest Increase
         max_speed_index = np.argmax(speeds)
@@ -199,10 +214,10 @@ async def Powell(nb_players:int = 2, path:str=None):
         # Powell's conditions
         f_0 = -speeds[0]
         f_N = -speeds[-1]
-        extra_point = ((2 * vectors[-1]) - vectors[0]) # 2*P_N-P_0 
+        extra_point = np.array((2 * vectors[-1]) - vectors[0]) # 2*P_N-P_0 
         print(f"f0:{f_0}, f_N:{f_N}, max_speed:{max_speed}, extrapoint:{extra_point}")
         
-        PN_P0_direction = (vectors[-1] - vectors[0])
+        PN_P0_direction = np.array(vectors[-1] - vectors[0])
         extra_point = line_min_max(current_point, PN_P0_direction, extra_point)
         extrapolated_speed = await get_EDMO_speed(server, vector_to_parameters(extra_point))
         f_E = -extrapolated_speed
@@ -215,16 +230,28 @@ async def Powell(nb_players:int = 2, path:str=None):
             print(f"PN-P0:{u[max_speed_index]}")
         
         Points = []
-        
+        f = open(param_dict_path, "w")
+        json.dump(param_dict, f)
+        f.close()
         # Ending conditions
-        if 2.0 * (speeds[-1] - last_speed) <= ftol * (math.fabs(last_speed) + math.fabs(speeds[-1])):
+        if 2.0 * (speeds[-1] - last_speed) <= 0.1 * (math.fabs(last_speed) + math.fabs(speeds[-1])):
             print(f"Convergence reached, maximum found! old: {last_speed}, current: {speeds[-1]}")
             
-            f = open(param_dict_path, "w")
-            json.dump(param_dict, f)
-            break
+            if speeds[-1] == last_speed and not random_modified:
+                random_modifications = np.random.randint(-10, 10, size=current_point.shape)
+                modified_arr = current_point + random_modifications
+                clamped_arr = modified_arr.copy()
+                for i in range(nb_legs):
+                    clamped_arr[i] = np.clip(modified_arr[i], *param_ranges['amp'])    # amp1, amp2
+                    clamped_arr[i + nb_legs] = np.clip(modified_arr[i + nb_legs], *param_ranges['off'])  # off1, off2
+                    clamped_arr[i + (2*nb_legs)] = np.clip(modified_arr[i + (2*nb_legs)], *param_ranges['phb'])  # phb1, phb2
+
+                current_point = clamped_arr
+                random_modified = True
+            else:
+                break
         else:
-            print(f"{2.0 * (speeds[-1] - last_speed)} > {ftol * (math.fabs(last_speed) + math.fabs(speeds[-1]))}")
+            print(f"{2.0 * (speeds[-1] - last_speed)} > {0.1 * (math.fabs(last_speed) + math.fabs(speeds[-1]))}")
         last_speed = speeds[-1]
 
 
@@ -268,7 +295,8 @@ def line_min_max(point, direction, extra_point=None):
     for i, dim in enumerate(direction):
         min_point.append(float(point[i]+(min_upper_diff*dim)))
         max_point.append(float(point[i]-(min_lower_diff*dim)))
-    
+        
+    min_point, max_point, point = np.array(min_point), np.array(max_point), np.array(point)        
     if extra_point is not None:
         interval_length = distance(min_point, max_point)
         if distance(min_point, extra_point) >= interval_length:
@@ -276,7 +304,7 @@ def line_min_max(point, direction, extra_point=None):
         elif distance(max_point, extra_point) >= interval_length:
             return min_point
         else:
-            return extra_point
+            return np.array(extra_point)
     
     if distance(min_point, max_point) >= distance(point, max_point):
         return min_point, point, max_point
@@ -287,6 +315,7 @@ def line_min_max(point, direction, extra_point=None):
             return point, min_point, max_point
 
 
+# region GOLDEN SEARCH
 # Constants for the golden ratio
 R = 0.61803399  # The golden ratio
 C = 1.0 - R   
@@ -309,10 +338,11 @@ async def golden(ax, bx, cx, fb, p, server):
         float: The position (vector) of the maximum.
     """
     
-    x0, x3 = ax, cx  
-    parameters0, parameters3 = p(x0), p(x3)
+    x0, x3 = np.array(ax), np.array(cx)  
+    parameters0, parameters3, parametersb = p(x0), p(x3), p(bx)
     print(f"Initial parameters computation ax, bx, cx:{ax}, {bx}, {cx}")
     f0 = await get_EDMO_speed(server, parameters0)
+    fb = await get_EDMO_speed(server, parametersb)
     f3 = await get_EDMO_speed(server, parameters3)
     print(f0, f3)
     # Return the maximum speed point bx is not a maximum because one end of the line is a maximum
@@ -332,14 +362,14 @@ async def golden(ax, bx, cx, fb, p, server):
     if math.fabs(distance(cx, bx)) > math.fabs(distance(bx, ax)):
         x1 = bx
         f1 = fb
-        x2 = bx + (C * (cx - bx))  # x0 to x1 is the smaller segment
+        x2 = np.array(bx + (C * (cx - bx)))  # x0 to x1 is the smaller segment
         print("f2 computation...")
         f2 = await get_EDMO_speed(server, parameters=p(x2))
         f2 = -f2
     else:
         x2 = bx
         f2 = fb
-        x1 = (bx - (C * (bx - ax)))
+        x1 = np.array(bx - (C * (bx - ax)))
         print("f1 computation...")
         f1 = await get_EDMO_speed(server, parameters=p(x1))
         f1 = -f1
@@ -351,11 +381,11 @@ async def golden(ax, bx, cx, fb, p, server):
     while math.fabs(distance(x3, x0)) > tol * (math.fabs(norm(x1)) + math.fabs(norm(x2))):
         print(f"in while loop:{itera}")
         if f2 < f1:
-            x0, x1, x2 = x1, x2, ((R* x1) + (C * x3))
+            x0, x1, x2 = x1, x2, np.array((R* x1) + (C * x3))
             f1, f2 = f2, await get_EDMO_speed(server, p(x2))
             f2 = -f2
         else:
-            x3, x2, x1 = x2, x1, ((R * x2) + (C * x0))
+            x3, x2, x1 = x2, x1, np.array((R * x2) + (C * x0))
             f2, f1 = f1, await get_EDMO_speed(server, p(x1))
             f1 = -f1
         itera += 1
@@ -391,7 +421,7 @@ def generate_unique_key(values, param_ranges, nb_legs):
     skipping the 'freq' parameter.
 
     Args:
-        values (list): List of parameter values (flattened) for all sets.
+        values (list): List of parameter values.
         param_ranges (dict): Dictionary defining the ranges for each parameter.
         num_sets (int): Number of sets of parameters.
 
@@ -462,9 +492,7 @@ if __name__ == "__main__":
     path = args.path    
 
     gopro = ["GoPro 4448"]    
-    # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
-    # await wifi_com.initialize()
-
+            
     with open(param_dict_path, 'r') as f:
         param_dict = json.load(f)
 

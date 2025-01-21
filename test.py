@@ -132,7 +132,7 @@ async def get_EDMO_speed(server, parameters, nb_legs):
     speed = data[0]['xy frame speed']*30 # m/s
     print(f"speed: {speed}")
     print(data)
-    visualize_xyz(pose_d.x, pose_d.y, pose_d.z, pose_d.t, speed, False)        
+    visualize_xy(pose_d.x, pose_d.y, speed)        
 
     # Store the parameters and speed in a hash table
     param_dict[key] = (speed, valid_frames)
@@ -143,13 +143,13 @@ async def main():
     # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
     # await wifi_com.initialize()
 
-    server = EDMOManual(gopro_list=[])
+    server = EDMOManual(gopro_list=["GoPro 4448"])
     asyncio.get_event_loop().create_task(server.run())
     server.GoProOff()
 
     parameters = {0:{'freq':1.0, 'amp':90.0, 'off':0.0,'phb':64.0}, 1:{'freq':1.0, 'amp':90.0, 'off':180.0,'phb':12.0}} # 0.04225769274242996
-    parameters = {0:{'freq':1.0, 'amp':90.0, 'off':98.0,'phb':359.0}, 1:{'freq':1.0, 'amp':58.0, 'off':100.0,'phb':62.0}} # 0.039866116498910815
-    parameters = {0:{'freq':1.0, 'amp':90.0, 'off':73.0,'phb':113.0}, 1:{'freq':1.0, 'amp':90.0, 'off':92.0,'phb':174.0}} # 0.03527106322744506
+    # parameters = {0:{'freq':1.0, 'amp':90.0, 'off':98.0,'phb':359.0}, 1:{'freq':1.0, 'amp':58.0, 'off':100.0,'phb':62.0}} # 0.039866116498910815
+    # parameters = {0:{'freq':1.0, 'amp':90.0, 'off':73.0,'phb':113.0}, 1:{'freq':1.0, 'amp':90.0, 'off':92.0,'phb':174.0}} # 0.03527106322744506
 
     await get_EDMO_speed(server, parameters, 2)
 
