@@ -1,5 +1,5 @@
 # visualize_xyz(pose_datas.x, pose_datas.y, pose_datas.z, pose_datas.t, False)
-from EDMOLearning import parameters_to_vector, parameters_to_param_list, param_ranges, generate_unique_key
+from EDMOLearning import parameters_to_vector, parameters_to_param_list, param_ranges, generate_unique_key, vector_to_parameters
 from data_analysis import compute_speed, merge_parameter_data
 from EDMOManual import EDMOManual
 from ArUCo_Markers_Pose import pose_data, pose_estimation
@@ -14,7 +14,7 @@ import os
 
 debug = False
 param_dict = {}
-param_dict_path = f"./Utilities/parameters_dictionnary_{2}.log"
+param_dict_path = f"./Utilities/parameters_dictionnary_Snake1.log"
 with open(param_dict_path, 'r') as f:
     param_dict = json.load(f)
 gopro = ["GoPro 4448"]    
@@ -128,15 +128,19 @@ async def get_EDMO_speed(server, parameters, nb_legs):
     
     param_list = parameters_to_param_list(parameters)
     exp_edmo_movement = compute_speed(exp_edmo_poses, filespath) # Compute EDMO's speed
-    data = merge_parameter_data({0:param_list}, exp_edmo_movement).to_dict(orient='records')   
-    speed = data[0]['xy frame speed']*30 # m/s
-    print(f"speed: {speed}")
-    print(data)
-    visualize_xy(pose_d.x, pose_d.y, speed)        
+    # data = merge_parameter_data({0:param_list}, exp_edmo_movement).to_dict(orient='records')   
+    # speed = data[0]['xy frame speed']*30 # m/s
+    # displacement = data[0]['xy frame displacement']*30
+    print(exp_edmo_movement)
+    speed = exp_edmo_movement[0][4]*30
+    displacement = exp_edmo_movement[0][9]*30
+    print(f"speed: {speed}, displacement: {displacement}")
+
+    # visualize_xy(pose_d.x, pose_d.y, displacement)        
 
     # Store the parameters and speed in a hash table
-    param_dict[key] = (speed, valid_frames)
-    return speed
+    # param_dict[key] = (speed, valid_frames)
+    return exp_edmo_movement[0]
 
 
 async def main():
@@ -146,13 +150,24 @@ async def main():
     server = EDMOManual(gopro_list=["GoPro 4448"])
     asyncio.get_event_loop().create_task(server.run())
     server.GoProOff()
-
-    parameters = {0:{'freq':1.0, 'amp':90.0, 'off':0.0,'phb':64.0}, 1:{'freq':1.0, 'amp':90.0, 'off':180.0,'phb':12.0}} # 0.04225769274242996
+    # vector = [59, 58, 57, 137, 74, 0]
+    # vector = [90, 90, 0, 180, 64, 12]
+    
+    # vector = [62, 90, 43, 75, 91, 0]
+    vector = [65, 63, 57, 137, 75, 0]
+    parameters = vector_to_parameters(vector)
+    # parameters = {0:{'freq':1.0, 'amp':90.0, 'off':0.0,'phb':64.0}, 1:{'freq':1.0, 'amp':90.0, 'off':180.0,'phb':12.0}} # 0.04225769274242996
     # parameters = {0:{'freq':1.0, 'amp':90.0, 'off':98.0,'phb':359.0}, 1:{'freq':1.0, 'amp':58.0, 'off':100.0,'phb':62.0}} # 0.039866116498910815
     # parameters = {0:{'freq':1.0, 'amp':90.0, 'off':73.0,'phb':113.0}, 1:{'freq':1.0, 'amp':90.0, 'off':92.0,'phb':174.0}} # 0.03527106322744506
-
-    await get_EDMO_speed(server, parameters, 2)
-
+    data = []
+    for _ in range(15):
+        exp_edmo_movement = await get_EDMO_speed(server, parameters, 2)
+        data.append(exp_edmo_movement)
+    store_path = f"{server.activeSessions[list(server.activeSessions.keys())[0]].sessionLog.directoryName}/consistency test.log"
+    print(f"Storing param history in {store_path}")
+    f = open(store_path, "w")
+    json.dump(data, f)
+    f.close()
 
 if __name__ == "__main__":
     asyncio.run(main())

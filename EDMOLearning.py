@@ -29,7 +29,7 @@ param_ranges = {
     'phb': [0, 180]
 }
 param_dict = {}
-param_dict_path = f"./Utilities/parameters_dictionnary_{nb_legs}.log"
+param_dict_path = f"./Utilities/parameters_dictionnary_Snake1.log"
 # region PARAMETER FORMAT: 
 # parameters: {0: {'freq': freq_value, 'amp': amp0, 'off': off0, 'phb': phb0}, 1: {'freq': f, 'amp': amp1, 'off': off1, 'phb': phb1}} needed for EDMOManual
 # param_list: [freq_value, [amp0, amp1], [off0, off1], [phb0, phb1]]                                                                  needed for computing speed
@@ -162,18 +162,23 @@ async def Powell(nb_players:int = 2, path:str=None):
     #             value = freq_value
     #         parameters[i][key] = float(value)
     # parameters = {0:{'freq':1.0, 'amp':80.0, 'off':60.0,'phb':0.0}, 1:{'freq':1.0, 'amp':60.0, 'off':120.0,'phb':0.0}}
-    init_random_point = [27.0, 58.0, 127.0, 100.0, 227.0, 62.0]
+    # [27.0, 58.0, 127.0, 100.0, 227.0, 62.0]done
     # [87.0, 78.0, 168.0, 106.0, 154.0, 124.0]
-    # [45.0, 5.0, 7.0, 92.0, 113.0, 174.0]
+    # [45.0, 5.0, 7.0, 92.0, 113.0, 174.0]done
     # [43.0, 46.0, 57.0, 58.0, 44.0, 34.0]
     # [0.0, 84.0, 79.0, 89.0, 50.0, 80.0]
     # [17.0, 38.0, 137.0, 81.0, 36.0, 173.0]
     # [43.0, 30.0, 45.0, 131.0, 132.0, 69.0]
     # [63.0, 77.0, 115.0, 168.0, 122.0, 178.0]
     # [63.0, 77.0, 115.0, 168.0, 122.0, 178.0]
-    # [70.0, 11.0, 141.0, 15.0, 87.0, 126.0]
+    # [70.0, 11.0, 141.0, 15.0, 87.0, 126.0]done
     # [60.0, 24.0, 105.0, 3.0, 150.0, 102.0]
-    # [80.0, 77.0, 10.0, 168.0, 120.0, 12.0]
+    # [80.0, 77.0, 10.0, 168.0, 120.0, 12.0]done
+    
+    init_random_point = [88, 59, 72, 100, 0, 62]
+    # [62, 90, 43, 75, 91, 0]
+    # [65, 63, 57, 137, 75, 0]
+    # [57, 63, 57, 137, 75, 12]
     parameters = vector_to_parameters(init_random_point)
     print(f"random parameters: {parameters}")
     

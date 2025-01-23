@@ -15,7 +15,7 @@ You can then control the GoPro via command line, type in help to get more inform
 
 ## 1. COHN Provision
 First step, we need to instruct the GoPro to create a COHN certificate by calling the `provision_cohn.py` file. 
-We need to provide the network's ssid and password. 
+We need to provide the network's ssid and password through which we want to communicate and our device needs to be connected to that same network. 
 
 An example call:-
 `python -m GoPro.COHN.provision_cohn ssid password 'GoPro XXXX'`

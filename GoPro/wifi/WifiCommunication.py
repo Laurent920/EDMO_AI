@@ -159,6 +159,15 @@ class WifiCommunication():
             case 'camera control':
                 op = "/gopro/camera/control/set_ui_controller"          
                 querystring = {"p":"0"}
+            case 'set resolution 1080':
+                op = "/gopro/camera/setting"
+                querystring = {"option":"9","setting":"2"}
+            case 'set resolution 4K':
+                op = "/gopro/camera/setting"
+                querystring = {"option":"1","setting":"2"}
+            case 'set resolution 5.3K':
+                op = "/gopro/camera/setting"
+                querystring = {"option":"100","setting":"2"}
             case 'get preset':
                 op = "/gopro/camera/presets/get"
             case 'set video':
@@ -211,7 +220,6 @@ class WifiCommunication():
                 print('wrong command')
                 return
         
-        # op = "/gopro/camera/presets/set_group?id=1000"
         url = GOPRO_BASE_URL + op
         logger.info(f"Sending {url}")
 
