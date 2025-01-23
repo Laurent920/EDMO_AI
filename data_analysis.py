@@ -102,6 +102,7 @@ def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
         per_frame_x_speed, per_frame_y_speed, per_frame_z_speed = 0.0, 0.0, 0.0
         
         frame_keys = list(positions.keys())
+        print(len(frame_keys))
         if len(frame_keys) <= 0:
             print("In compute_speed: zero valid frame")
             return {}
@@ -160,7 +161,7 @@ def compute_speed(exp_edmo_poses:dict[int, dict[int, list]], filepath):
                                     x_displacement, y_displacement, z_displacement, per_frame_global_displacement, per_frame_xy_displacement, exp_nb, nb_frames]
         f = open(f"{filepath}/speed_data.log", "w")
         json.dump(exp_edmo_movement, f)
-    if debug:
+    if debug:# and len(x_all_diff) != 0 and len(y_all_diff) != 0 and len(z_all_diff) != 0:
         n = 3
         print(f'avg x displacement: {sum(x_all_diff) / len(x_all_diff)}, max : {heapq.nlargest(n, x_all_diff)}, min : {heapq.nsmallest(n, x_all_diff)}')
         print(f'avg y displacement: {sum(y_all_diff) / len(y_all_diff)}, max : {heapq.nlargest(n, y_all_diff)}, min : {heapq.nsmallest(n,y_all_diff)}')
