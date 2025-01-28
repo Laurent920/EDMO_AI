@@ -76,9 +76,9 @@ def visualize_xy(x, y, speed, filename=None):
     plt.title(f"Edmo's movement (speed: {speed} m/s) ")
     plt.grid()
     
-    plt.savefig(f"{filename}", dpi=300, bbox_inches='tight')  # Save as a high-resolution PNG file
+    plt.savefig(filename, dpi=300, bbox_inches='tight')  # Save as a high-resolution PNG file
 
-    plt.show()
+    # plt.show()
 
 
 def plot_video(filepaths):    
@@ -99,12 +99,13 @@ def plot_video(filepaths):
     edmo_rots = pose_d.edmo_rots
     exp_edmo_poses = {}
     exp_edmo_poses[0] = {}
-    valid_frames = pose_d.nbFrames
-    print(f"Valid frames: {valid_frames}")
-    if valid_frames <= 0:
+    frames = pose_d.nbFrames
+    
+    print(f"Valid frames: {len(edmo_poses)}")
+    if len(edmo_poses) <= 0:
         return 0.0
     
-    for frame in range(valid_frames):
+    for frame in range(frames):
         if frame in edmo_poses:
             exp_edmo_poses[0][frame] = edmo_poses[frame]
     
@@ -118,8 +119,8 @@ def plot_video(filepaths):
     displacement = exp_edmo_movement[0][9]*30
     print(f"speed: {speed}, displacement: {displacement}")
 
-    visualize_xy(pose_d.x, pose_d.y, displacement, filename)        
-    visualize_xyz(pose_d.x, pose_d.y, pose_d.z, pose_d.t) 
+    visualize_xy(pose_d.x, pose_d.y, displacement, f"{filespath}/{filename}")        
+    # visualize_xyz(pose_d.x, pose_d.y, pose_d.z, pose_d.t) 
 
 
 async def get_EDMO_speed(server, parameters, nb_legs):
@@ -213,6 +214,7 @@ async def main():
 
 if __name__ == "__main__":
     # asyncio.run(main())
-    for file in os.listdir('./'):
+    path = './'
+    for file in os.listdir(path):
         if file[:2] == 'GX' and file[-4:] == ".MP4":
-            plot_video([f"./{file}"])
+            plot_video([f"{path}{file}"])
