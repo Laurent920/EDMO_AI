@@ -35,31 +35,31 @@ def visualize_xyz(x, y, z, t, time=False):
     ax.set_zlabel(zlabel)
     ax.legend()
     
-    plt.figure(figsize=(12, 8))
-    plt.subplot(3, 1, 1)
-    plt.plot(t, x)
-    plt.title("X-axis Positions")
-    plt.xlabel("frame number")
-    plt.ylabel("X (m)")
-    plt.grid()
+    # plt.figure(figsize=(12, 8))
+    # plt.subplot(3, 1, 1)
+    # plt.plot(t, x)
+    # plt.title("X-axis Positions")
+    # plt.xlabel("frame number")
+    # plt.ylabel("X (m)")
+    # plt.grid()
     
-    plt.subplot(3, 1, 2)
-    plt.plot(t, y)
-    plt.title("Y-axis Positions")
-    plt.xlabel("frame number")
-    plt.ylabel("Y (m)")
-    plt.grid()
+    # plt.subplot(3, 1, 2)
+    # plt.plot(t, y)
+    # plt.title("Y-axis Positions")
+    # plt.xlabel("frame number")
+    # plt.ylabel("Y (m)")
+    # plt.grid()
     
-    plt.subplot(3, 1, 3)
-    plt.plot(t, z)
-    plt.title("Z-axis Positions")
-    plt.xlabel("frame number")
-    plt.ylabel("Z (m)")
-    plt.grid()
+    # plt.subplot(3, 1, 3)
+    # plt.plot(t, z)
+    # plt.title("Z-axis Positions")
+    # plt.xlabel("frame number")
+    # plt.ylabel("Z (m)")
+    # plt.grid()
     plt.show()
     
     
-def visualize_xy(x, y, speed):         
+def visualize_xy(x, y, speed, filename=None):         
     plt.figure(figsize=(12, 8))
     
     plt.plot(x, y)
@@ -75,8 +75,51 @@ def visualize_xy(x, y, speed):
     
     plt.title(f"Edmo's movement (speed: {speed} m/s) ")
     plt.grid()
+    
+    plt.savefig(f"{filename}", dpi=300, bbox_inches='tight')  # Save as a high-resolution PNG file
 
     plt.show()
+
+
+def plot_video(filepaths):    
+    print(filepaths)
+    filename = os.path.splitext(os.path.basename(filepaths[0]))[0]
+
+    video_path = filepaths[0]
+    filespath = os.path.dirname(video_path) 
+    aruco_pose = pose_estimation.Aruco_pose(video_path) # Get the positions of the Aruco markers
+    dict_all_pos = aruco_pose.pose_estimation() 
+        
+    pose_d = pose_data.Pose_data(filespath, dict_all_pos=dict_all_pos) # Get the positions of the EDMO
+    succeed = pose_d.get_pose()
+    if not succeed:
+        return
+    print("EDMO pose calculation succeeded")
+    edmo_poses = pose_d.edmo_poses
+    edmo_rots = pose_d.edmo_rots
+    exp_edmo_poses = {}
+    exp_edmo_poses[0] = {}
+    valid_frames = pose_d.nbFrames
+    print(f"Valid frames: {valid_frames}")
+    if valid_frames <= 0:
+        return 0.0
+    
+    for frame in range(valid_frames):
+        if frame in edmo_poses:
+            exp_edmo_poses[0][frame] = edmo_poses[frame]
+    
+    # param_list = parameters_to_param_list(parameters)
+    exp_edmo_movement = compute_speed(exp_edmo_poses, filespath) # Compute EDMO's speed
+    # data = merge_parameter_data({0:param_list}, exp_edmo_movement).to_dict(orient='records')   
+    # speed = data[0]['xy frame speed']*30 # m/s
+    # displacement = data[0]['xy frame displacement']*30
+    print(exp_edmo_movement)
+    speed = exp_edmo_movement[0][4]*30
+    displacement = exp_edmo_movement[0][9]*30
+    print(f"speed: {speed}, displacement: {displacement}")
+
+    visualize_xy(pose_d.x, pose_d.y, displacement, filename)        
+    visualize_xyz(pose_d.x, pose_d.y, pose_d.z, pose_d.t) 
 
 
 async def get_EDMO_speed(server, parameters, nb_legs):
@@ -126,7 +169,7 @@ async def get_EDMO_speed(server, parameters, nb_legs):
         if frame in edmo_poses:
             exp_edmo_poses[0][frame] = edmo_poses[frame]
     
-    param_list = parameters_to_param_list(parameters)
+    # param_list = parameters_to_param_list(parameters)
     exp_edmo_movement = compute_speed(exp_edmo_poses, filespath) # Compute EDMO's speed
     # data = merge_parameter_data({0:param_list}, exp_edmo_movement).to_dict(orient='records')   
     # speed = data[0]['xy frame speed']*30 # m/s
@@ -136,16 +179,14 @@ async def get_EDMO_speed(server, parameters, nb_legs):
     displacement = exp_edmo_movement[0][9]*30
     print(f"speed: {speed}, displacement: {displacement}")
 
-    # visualize_xy(pose_d.x, pose_d.y, displacement)        
-
+    visualize_xy(pose_d.x, pose_d.y, displacement)      
     # Store the parameters and speed in a hash table
     # param_dict[key] = (speed, valid_frames)
     return exp_edmo_movement[0]
 
-
 async def main():
-    # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
-    # await wifi_com.initialize()
+    wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
+    await wifi_com.initialize()
 
     server = EDMOManual(gopro_list=["GoPro 4448"])
     asyncio.get_event_loop().create_task(server.run())
@@ -164,10 +205,14 @@ async def main():
         exp_edmo_movement = await get_EDMO_speed(server, parameters, 2)
         data.append(exp_edmo_movement)
     store_path = f"{server.activeSessions[list(server.activeSessions.keys())[0]].sessionLog.directoryName}/consistency test.log"
+
     print(f"Storing param history in {store_path}")
     f = open(store_path, "w")
     json.dump(data, f)
     f.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # asyncio.run(main())
+    for file in os.listdir('./'):
+        if file[:2] == 'GX' and file[-4:] == ".MP4":
+            plot_video([f"./{file}"])
