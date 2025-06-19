@@ -5,6 +5,8 @@ Run the `main.py` file as usual
 # EDMO AI 
 Some of the files might require the usage of a GoPro camera, if not done yet please familiarize yourself with the README file in the GoPro folder.
 
+For the firmware version, reference to https://github.com/TeamEDMO/ArduinoFirmware/tree/79c73c0e9b93b5e5dc36952852933beb40ee9761
+
 ## EDMO Manual
 This file contains the main logic built upon EDMOBackend. Running this file allows you to control the EDMO through command line either by setting some specific values or by replaying a file. Run using:
 
@@ -14,12 +16,15 @@ This file contains the main logic built upon EDMOBackend. Running this file allo
 This file contains the code for 3 usages and it contains the base code for controlling the GoPro and the EDMO so that the EDMO's movement is recorded and stored in the replayed/explored folder alongside the `Input_ManualX.log` files for further analysis.
 
 1. Generate the parameter sets for systematic search of the parameter space specifying the number of legs of the EDMO, storing all parameters in the `exploreData` folder: 
+
     `python experiments.py --generate 2`
 
 2. Replay: Goes through all the files in SessionLogs to replay the files of the corresponding EDMO, following the instructions in the terminal to whether play the file or skip it:
+
     `python experiments.py --replay Snake2` 
 
 3. Explore: Explore the parameters file in `exploreData` created by running the code point 1:
+
     `python experiments.py --explore` 
 
 The parameter `-p` can be used to specify the starting file at which we want to start replay/explore. 
