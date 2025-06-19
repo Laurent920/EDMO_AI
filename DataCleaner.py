@@ -12,8 +12,13 @@ printDebugInfo = False
 # Clean the data by removing the packets that were lost in at least one of the data logs
 # and remove the possible duplicates
 
-precision = 0.04 # The margin in seconds from which we consider a packet to be out of sync
+precision = 0.08 # The margin in seconds from which we consider a packet to be out of sync
 def readLog(location):
+    """ 
+    Read the log files of IMU and Motors
+    and return the data in a list of lists.
+    Each list contains the data of one log file.
+    """
     Regex = r"(\d+:\d{2}:\d{2})(?!\.\d{6})"
 
     motorData = []
@@ -162,6 +167,9 @@ def writeToLog(motorData, timesToRemove, path):
                     if not os.path.exists(video_path):
                         os.replace(f'{path}/{filename}', video_path)
                     continue
+                if os.path.splitext(filename)[1].lower() != '.txt':
+                    # Skip all non text files
+                    continue
                 # Copy files that don't need to be cleaned
                 with open(f'{path}/{filename}', 'r') as src:
                     for line in src:
@@ -234,14 +242,14 @@ def clean(path, readMulti, folderName=None):
 
 
 if __name__ == "__main__":
-    readMulti = True
+    readMulti = True # Clean all the files in the specified folder or just the one specified in path
 
     if readMulti:
         path = './SessionLogs/'
-        clean(path, readMulti, '2025.01.07')
+        # clean(path, readMulti, '2025.01.07') # Restrict to a single date folder eg. "2025.01.07"
+        clean(path, readMulti)
     else:
         path = './SessionLogs/2024.11.18/Athena/15.30.55'
         path = './exploreData/Snake/2700-2879' 
         clean(path, readMulti=readMulti)
 
-# Refaire 2024.09.19/Cadence/10.13.50

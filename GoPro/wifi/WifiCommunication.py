@@ -38,7 +38,7 @@ class WifiCommunication():
                 with open(folder / Path('ssid.txt'), 'r') as cred:
                     arguments = cred.read() 
                     
-                splits = arguments.split(" ", 2)
+                splits = arguments.split("|", 2)
                 self.ssid = splits[0]
                 self.password = splits[1]
                 
@@ -97,8 +97,9 @@ class WifiCommunication():
             logger.info(f"Password is {password}")
             
             logger.info(f"Saving login data in {self.saveFile}")
+            os.makedirs(os.path.dirname(self.saveFile), exist_ok=True)
             with open(self.saveFile, 'w') as f:
-                f.write(f'{self.ssid} {self.password}')
+                f.write(f'{self.ssid}|{self.password}')
             
 
         # Write to the Command Request BleUUID to enable WiFi
@@ -155,6 +156,7 @@ class WifiCommunication():
         file = ''
         querystring = {}
         location = []
+        # More commands and details can be found at https://gopro.github.io/OpenGoPro/http
         match command:
             case 'camera control':
                 op = "/gopro/camera/control/set_ui_controller"          
@@ -168,8 +170,6 @@ class WifiCommunication():
             case 'set resolution 5.3K':
                 op = "/gopro/camera/setting"
                 querystring = {"option":"100","setting":"2"}
-            case 'get preset':
-                op = "/gopro/camera/presets/get"
             case 'set video':
                 op = '/gopro/camera/presets/set_group?id=1000'
             case 'set photo':
@@ -177,6 +177,8 @@ class WifiCommunication():
             case 'load preset':
                 op = "/gopro/camera/presets/load"
                 querystring = {"id":"6"}
+            case 'get preset':
+                op = "/gopro/camera/presets/get"
             case 'keep alive':
                 # Good practice: send every 3 seconds
                 op = "/gopro/camera/keep_alive"
@@ -206,15 +208,27 @@ class WifiCommunication():
                 op = "/gopro/media/last_captured"
                 download_video = True
             case 'get video':
-                video_path = input('Enter the name of the folder and file of the video on the GoPro: ')
+                video_path = input('Enter the name of the folder and file of the video on the GoPro separated by a blank space: ')
                 folder, file = video_path.split(" ")
                 op = f"/videos/DCIM/{folder}/{file}"
                 download_video = True
             case 'hilight':    
                 op = "/gopro/media/hilight/moment"
             case 'help':
-                # TODO 
-                print('options details need to be added')
+                 # ANSI escape codes for color
+                BLUE = "\033[34m"
+                WHITE = "\033[37m"
+
+                # Get the current file's directory
+                module_dir = os.path.dirname(__file__)
+                commands_file = os.path.join(module_dir, "commands.txt")
+
+                # Read the file
+                with open(commands_file, "r") as file:
+                    for line in file:
+                        print(f"{BLUE}{line.strip()}{WHITE}")  # Print in blue, then reset to white
+
+                print('more options can be added')
                 return
             case _:
                 print('wrong command')
@@ -310,3 +324,4 @@ if __name__ == "__main__":
     wifi_com = WifiCommunication(args.identifier, path)
     
     asyncio.run(main(wifi_com))
+   

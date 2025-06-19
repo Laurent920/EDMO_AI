@@ -17,6 +17,14 @@ session_length = 180 # How many parameter change do we run in one session
 end_time = session_length*episode_length + timedelta(microseconds=1)
 
 def generate_exploration_files(nbPlayers: int = 2):
+    '''
+    Generates the systematic search parameters for the EDMO with the specified number of players.
+    
+    - Records the parameters in the folder ./exploreData/{edmo_type}/{session_number} 
+    - Each session folder will contain 'session_length' unique parameter sets.
+    - For each player, creates files named Input_Manual0.log, Input_Manual1.log, etc.
+    - Each set of parameter is set to be run for episode_length seconds
+    '''
     explorePath = './exploreData'
     if not os.path.exists(explorePath):
         os.makedirs(explorePath)
@@ -149,9 +157,13 @@ def get_all_phase(phb):
 # region SETUP AND RUN        
 
 async def experiment_setup():        
-    wifi_com = WifiCommunication("GoPro 6665", Path("GoPro/GoPro 6665"))
+    '''
+    Setup the GoPro communication and an empty EDMOManual server.
+    '''
+    gopro = "GoPro 4448"
+    wifi_com = WifiCommunication(gopro, Path("GoPro/"+gopro))
     await wifi_com.initialize()
-    server = EDMOManual()
+    server = EDMOManual(gopro_list=[gopro])
     asyncio.get_event_loop().create_task(server.run())
     await asyncio.sleep(1)
     await server.close()
@@ -193,8 +205,8 @@ async def replay(startFilePath: str=None, edmo_list:list[str]=[]):
     server = await experiment_setup()    
 
     cwd = os.getcwd()
-    date_dir = cwd + '\\cleanData'
-    print(f"Searching for {edmo_list} files in ./cleanData ....")
+    date_dir = cwd + '\\SessionLogs'
+    print(f"Searching for {edmo_list} files in ./SessionLogs ....")
     for date_folder in os.listdir(date_dir):
         edmo_dir = date_dir + '\\' + date_folder 
         for edmo_folder in os.listdir(edmo_dir):
@@ -255,7 +267,7 @@ if __name__ == "__main__":
     # edmo_type= "Snake"
     
     if nb_legs:
-        generate_exploration_files(nb_legs)
+        generate_exploration_files(int(nb_legs))
     elif edmo_files:
         if startFilePath:
             startFilePath.replace('/', '\\')

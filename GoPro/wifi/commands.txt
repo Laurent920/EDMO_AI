@@ -1,0 +1,23 @@
+camera control: get control of the camera, the camera will return to the idle screen
+set resolution 1080: to set resolution
+set resolution 4K: to set resolution
+set resolution 5.3K: to set resolution
+set video: to set to video
+set photo: to set to photo
+get last video: to download the last video in the current directory
+get video: get a video by specifying the video's folder and file name
+start: to start a video in video mode or capture a photo in photo mode
+stop: to stop the video if recording otherwise does nothing
+get preset: to get the available presets
+load preset: to load the preset by ID (default to 6)
+keep alive: send every 3 seconds or change camera sleep time
+start stream: to start a stream
+stop stream: to stop the stream
+get camera state: to get all camera settings and statuses
+get camera battery: to get the camera's battery bar (0-3, 4=charging)
+get cohn state: to get COHN status
+get media list: see https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_MEDIA_LIST
+turbo mode: to download via wifi faster
+get last video: to download the last video in the current directory
+get video: get a video by specifying the video's folder and file name
+hilight: add a hilight to the gopro

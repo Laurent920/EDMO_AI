@@ -20,7 +20,7 @@ from GoPro.wifi.WifiCommunication import WifiCommunication
 debug = True
 
 gopro = []
-nb_legs = 2
+nb_legs = 0
 freq_value = 1.0
 param_ranges = {
     'freq': [1, 1],
@@ -28,12 +28,24 @@ param_ranges = {
     'off': [0, 180],
     'phb': [0, 180]
 }
+experiment_duration = 10 # How long one set of parameter runs (Seconds)
+
 param_dict = {}
-param_dict_path = f"./Utilities/parameters_dictionnary_Snake1.log"
-# region PARAMETER FORMAT: 
-# parameters: {0: {'freq': freq_value, 'amp': amp0, 'off': off0, 'phb': phb0}, 1: {'freq': f, 'amp': amp1, 'off': off1, 'phb': phb1}} needed for EDMOManual
-# param_list: [freq_value, [amp0, amp1], [off0, off1], [phb0, phb1]]                                                                  needed for computing speed
-# vector:     [amp0, amp1, off0, off1, phb0, phb1]                                                                                    needed for Powell
+param_dict_path = ""
+
+# region PARAM FORMAT 
+""" 
+PARAMETER FORMAT: 
+    parameters for EDMOManual:     
+    {
+        0: {'freq': freq_value, 'amp': amp0, 'off': off0, 'phb': phb0}, 
+        1: {'freq': freq_value, 'amp': amp1, 'off': off1, 'phb': phb1}
+    }
+    param_list for computing speed: [freq_value, [amp0, amp1], [off0, off1], [phb0, phb1]]                                                                  
+    vector for Powell:              [amp0, amp1, off0, off1, phb0, phb1]    
+    
+The following functions convert between these formats                                                                               
+"""
 def parameters_to_param_list(parameters):
     param_list = [parameters[0]['freq']]
 
@@ -57,6 +69,7 @@ def vector_to_parameters(vector):
     counter = 0
     for key, _ in param_ranges.items():
         for i in range(nb_legs):
+            print(key, i)
             if key == 'freq':
                 parameters[i] = {}
                 parameters[i][key] = freq_value
@@ -75,12 +88,22 @@ def vector_to_param_list(vector):
 
 # region GET EDMO SPEED    
 async def get_EDMO_speed(server, parameters):
+    """
+    Get the speed of the EDMO by sending the parameters to the EDMO and computing the speed from the video.
+    Args:
+        server     : EDMOManual 
+        parameters : Set of parameters to be sent to the edmo
+        
+    Returns:
+        displacement: speed computed using the positions of the EDMO on the first and last frame.
+        or
+        speed       : speed computed by averaging the difference in position of the EDMO on all frames.
+    """
     vector = parameters_to_vector(parameters)
     if 0 in vector[:nb_legs] or np.nan in vector:
         print(f"{vector} in get_EDMO_speed")
         return 0.0
-    if debug:
-        print(f"parameters in get_EDMO_speed: {parameters}")
+    if debug: print(f"parameters in get_EDMO_speed: {parameters}")
     
     # Look up the parameters dictionnary if this set already exists
     key = generate_unique_key(parameters_to_vector(parameters), param_ranges, nb_legs)
@@ -93,9 +116,9 @@ async def get_EDMO_speed(server, parameters):
     # Send input to the server
     await server.runInputDict(parameters)
     
-    server.GoProOn()
-    await asyncio.sleep(10) # How long one set of parameter runs
-    filepaths = await server.GoProStopAndSave()
+    server.GoProOn() # Start the GoPro recording
+    await asyncio.sleep(experiment_duration) 
+    filepaths = await server.GoProStopAndSave() # Stop the GoPro recording and save the video
     
     print(filepaths)
     video_path = filepaths[0]
@@ -134,8 +157,8 @@ async def get_EDMO_speed(server, parameters):
 
 # region POWELL
 async def Powell(nb_players:int = 2, path:str=None):
-    # wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
-    # await wifi_com.initialize()
+    wifi_com = WifiCommunication(gopro[0], Path(f"GoPro/{gopro[0]}"))
+    await wifi_com.initialize()
     
     nb_legs = nb_players
     
@@ -147,20 +170,22 @@ async def Powell(nb_players:int = 2, path:str=None):
     n = nb_players * (len(param_ranges)-1) # number of dimensions to explore
     u = {dimension+1: [1 if i == dimension else 0 for i in range(n)] for dimension in range(n)} # Initialize the dimensions with unit vectors
     
+    # Load past data
     param_history = []
     if path is not None:
         with open(path, 'r') as f:
             param_history = json.load(f)
 
-    parameters = {}
     # Random initialization of parameters
-    # for i in range(nb_players):
-    #     parameters[i] = {}
-    #     for _, (key, param_range) in enumerate(param_ranges.items()):
-    #         value = random.randint(*param_range)
-    #         if key == 'freq':
-    #             value = freq_value
-    #         parameters[i][key] = float(value)
+    parameters = {}
+    for i in range(nb_players):
+        parameters[i] = {}
+        for _, (key, param_range) in enumerate(param_ranges.items()):
+            value = random.randint(*param_range)
+            if key == 'freq':
+                value = freq_value
+            parameters[i][key] = float(value)
+            
     # parameters = {0:{'freq':1.0, 'amp':80.0, 'off':60.0,'phb':0.0}, 1:{'freq':1.0, 'amp':60.0, 'off':120.0,'phb':0.0}}
     # [27.0, 58.0, 127.0, 100.0, 227.0, 62.0]done
     # [87.0, 78.0, 168.0, 106.0, 154.0, 124.0]
@@ -175,11 +200,11 @@ async def Powell(nb_players:int = 2, path:str=None):
     # [60.0, 24.0, 105.0, 3.0, 150.0, 102.0]
     # [80.0, 77.0, 10.0, 168.0, 120.0, 12.0]done
     
-    init_random_point = [88, 59, 72, 100, 0, 62]
+    # init_random_point = [88, 59, 72, 100, 0, 62]
     # [62, 90, 43, 75, 91, 0]
     # [65, 63, 57, 137, 75, 0]
     # [57, 63, 57, 137, 75, 12]
-    parameters = vector_to_parameters(init_random_point)
+    # parameters = vector_to_parameters(init_random_point)
     print(f"random parameters: {parameters}")
     
     current_speed = await get_EDMO_speed(server, parameters)
@@ -201,6 +226,7 @@ async def Powell(nb_players:int = 2, path:str=None):
             iterations += 1
 
         param_history.append((Points, u))
+        
         # Storing the param history
         store_path = f"{server.activeSessions[list(server.activeSessions.keys())[0]].sessionLog.directoryName}/param_history.log"
         print(f"Storing param history in {store_path}")
@@ -238,6 +264,7 @@ async def Powell(nb_players:int = 2, path:str=None):
         f = open(param_dict_path, "w")
         json.dump(param_dict, f)
         f.close()
+        
         # Ending conditions
         if 2.0 * (speeds[-1] - last_speed) <= 0.1 * (math.fabs(last_speed) + math.fabs(speeds[-1])):
             print(f"Convergence reached, maximum found! old: {last_speed}, current: {speeds[-1]}")
@@ -345,11 +372,12 @@ async def golden(ax, bx, cx, fb, p, server):
     
     x0, x3 = np.array(ax), np.array(cx)  
     parameters0, parameters3, parametersb = p(x0), p(x3), p(bx)
-    print(f"Initial parameters computation ax, bx, cx:{ax}, {bx}, {cx}")
+    if debug:
+        print(f"Initial parameters computation ax, bx, cx:{ax}, {bx}, {cx}")
     f0 = await get_EDMO_speed(server, parameters0)
     fb = await get_EDMO_speed(server, parametersb)
     f3 = await get_EDMO_speed(server, parameters3)
-    print(f0, f3)
+    # print(f0, f3)
     # Return the maximum speed point bx is not a maximum because one end of the line is a maximum
     if fb < f0 and fb < f3:
         if f0 <= f3:
@@ -368,23 +396,26 @@ async def golden(ax, bx, cx, fb, p, server):
         x1 = bx
         f1 = fb
         x2 = np.array(bx + (C * (cx - bx)))  # x0 to x1 is the smaller segment
-        print("f2 computation...")
+        if debug:
+            print("f2 computation...")
         f2 = await get_EDMO_speed(server, parameters=p(x2))
         f2 = -f2
     else:
         x2 = bx
         f2 = fb
         x1 = np.array(bx - (C * (bx - ax)))
-        print("f1 computation...")
+        if debug:
+            print("f1 computation...")
         f1 = await get_EDMO_speed(server, parameters=p(x1))
         f1 = -f1
         
-    print(x0, x1, x2, x3)
+    # print(x0, x1, x2, x3)
 
     # Iteratively refine the search
     itera = 0
     while math.fabs(distance(x3, x0)) > tol * (math.fabs(norm(x1)) + math.fabs(norm(x2))):
-        print(f"in while loop:{itera}")
+        if debug:
+            print(f"in while loop:{itera}")
         if f2 < f1:
             x0, x1, x2 = x1, x2, np.array((R* x1) + (C * x3))
             f1, f2 = f2, await get_EDMO_speed(server, p(x2))
@@ -398,19 +429,8 @@ async def golden(ax, bx, cx, fb, p, server):
         return -f1, x1  
     else:
         return -f2, x2
-    
-def vector_add(a:list, b:list):
-    return [ax + bx for ax, bx in zip(a, b)]
 
-def vector_add_val(l:list, value:int):
-    return [x + value for x in l]
-
-def vector_sub(a:list, b:list):
-    return [ax - bx for ax, bx in zip(a, b)]
-
-def vector_mul(value, l:list):
-    return [x * value for x in l]
-
+# region helpers
 def norm(l:list):
     return math.sqrt(sum(x**2 for x in l))
 
@@ -496,9 +516,11 @@ if __name__ == "__main__":
     
     path = args.path    
 
-    gopro = ["GoPro 4448"]    
-            
+    gopro = ["GoPro 4448"] 
+    nb_legs = 4
+    
+    param_dict_path = f"./Utilities/parameters_dictionnary_Snake1.log"            
     with open(param_dict_path, 'r') as f:
         param_dict = json.load(f)
 
-    asyncio.run(Powell(path=path))
+    asyncio.run(Powell(nb_players=nb_legs, path=path))

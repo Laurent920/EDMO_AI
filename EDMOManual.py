@@ -128,14 +128,23 @@ class EDMOManual:
         for gopro_id in self.goPros:
             self.goPros[gopro_id].send_command('keep alive')
 
-    def GoProBattery(self):
+    def GoProBattery(self): # Not useful if the GoPro is powered by cable (this function can be deleted)
         battery = []
         for gopro_id in self.goPros:
             battery.append(self.goPros[gopro_id].send_command('get camera battery'))
         return battery            
 
 # region INPUT MANAGEMENT
-    async def runInputDict(self,parameters:dict[int, dict[str, int]]): # parameters ex: {0: {'freq': 0, 'amp': 0, 'off': 90, 'phb': 0}, 1: {'freq': 0, 'amp': 0, 'off': 90, 'phb': 0}}
+    async def runInputDict(self,parameters:dict[int, dict[str, int]]): 
+        '''
+        Run the input dictionary.
+        parameters example for a snake edmo: 
+            {
+            0: {'freq': 0, 'amp': 0, 'off': 90, 'phb': 0}, 
+            1: {'freq': 0, 'amp': 0, 'off': 90, 'phb': 0}
+            }
+                             
+        '''
         async with self.connected:
             print("waiting for active sessions in runInputDict EDMOManual.py")
             await self.connected.wait_for(lambda: bool(self.activeSessions))
@@ -180,6 +189,10 @@ class EDMOManual:
     
     
     async def parseInputFile(self, instructions, explore:bool=False):
+        '''
+        Parses the input file or instruction given by the user. 
+        '''
+        
         async with self.connected:
             print("waiting for active sessions in parseInputFile EDMOManual.py")
             await self.connected.wait_for(lambda: bool(self.activeSessions))
@@ -219,8 +232,8 @@ class EDMOManual:
                 await asyncio.gather(*tasks)
                 return True
             case "reset":
-                print("Resetting")
-                self.reset()
+                print("Resetting has to corrected in case of manual input")
+                # self.reset()
             case "help":
                 print("""instructions to use: 
                     single control: c motor_id 'amp'/'off'/'freq'/'phb' float (ex: c 3 amp 13.5) 
